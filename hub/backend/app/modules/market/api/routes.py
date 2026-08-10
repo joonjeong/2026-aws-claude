@@ -22,6 +22,14 @@ router = APIRouter()
 cache = TTLCache()
 _last_fetch: dict[str, float] = {}  # cache key -> unix time of last upstream fetch
 
+# 심볼 화이트리스트: 임의 문자열이 캐시 키·상류 조회로 흘러가는 것을 차단
+_KNOWN_SYMBOLS = {s for s, _ in config.US_SYMBOLS} | {s for s, _ in config.KR_SYMBOLS}
+
+
+def _require_known(symbol: str) -> None:
+    if symbol not in _KNOWN_SYMBOLS:
+        raise HTTPException(status_code=404, detail=f"unknown symbol {symbol}")
+
 
 async def _cached(key: str, ttl_s: float,
                   fetch: Callable[[], Awaitable[Any]]) -> tuple[Any, bool]:
@@ -102,6 +110,7 @@ async def market_quotes(response: Response) -> dict[str, Any]:
 
 @router.get("/stocks/{symbol}")
 async def stock_detail(symbol: str, response: Response) -> dict[str, Any]:
+    _require_known(symbol)
     market = "KR" if kr.is_kr_symbol(symbol) else "US"
     try:
         data, hit = await _cached(f"detail:{symbol}", hours.quote_ttl(market),
@@ -117,6 +126,7 @@ async def stock_detail(symbol: str, response: Response) -> dict[str, Any]:
 
 @router.get("/stocks/{symbol}/chart")
 async def stock_chart(symbol: str, response: Response, range: str = "1m") -> dict[str, Any]:
+    _require_known(symbol)
     if range not in charts.RANGES:
         raise HTTPException(status_code=422,
                             detail=f"range must be one of {list(charts.RANGES)}")
@@ -134,6 +144,7 @@ async def stock_chart(symbol: str, response: Response, range: str = "1m") -> dic
 
 @router.post("/ai/stocks/{symbol}")
 async def ai_analyze(symbol: str) -> StreamingResponse:
+    _require_known(symbol)
     if not ai.token_present():
         # 503 BEFORE any streaming — AI panel shows disabled state
         raise HTTPException(status_code=503, detail="AWS_BEARER_TOKEN_BEDROCK not set")

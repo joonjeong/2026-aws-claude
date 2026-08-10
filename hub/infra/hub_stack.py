@@ -187,6 +187,10 @@ class HubStack(Stack):
             default_behavior=cloudfront.BehaviorOptions(
                 origin=origins.HttpOrigin(
                     alb.load_balancer_dns_name,
+                    # 수용된 트레이드오프(스펙: 도메인/ACM 없이 개장): CloudFront→ALB
+                    # 구간이 HTTP라 X-Origin-Verify 값이 평문 전송된다. 완화책으로
+                    # ALB 인바운드를 CloudFront origin-facing prefix list로 제한.
+                    # 강화 경로: ACM 인증서 + HTTPS_ONLY 로 전환.
                     protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY,
                     custom_headers={
                         "X-Origin-Verify": (

@@ -21,4 +21,7 @@ cdk.out/
 .DS_Store
 
 # earthquake/는 자체 git 저장소 (설계 문서는 docs/specs/에 집결됨)
-/earthquake/
+/earthquake
+
+# ch1/도 자체 git 저장소
+/ch1

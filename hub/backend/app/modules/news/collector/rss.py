@@ -54,7 +54,8 @@ def normalize_entries(source_id: str, parsed: Any) -> list[dict]:
         try:
             link = (entry.get("link") or "").strip()
             title = strip_html(entry.get("title") or "", max_chars=500)
-            if not link or not title:
+            # http(s)만 허용 — 오염된 피드의 javascript: 등 스킴이 href로 흘러가는 것 차단
+            if not link.startswith(("http://", "https://")) or not title:
                 continue
             articles.append(
                 {
