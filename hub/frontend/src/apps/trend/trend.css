@@ -18,7 +18,7 @@
   --trend-chip-on-text: #101216;
 }
 
-.app-trend .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+.app-trend .wrap { padding: 16px 24px; }
 
 .app-trend .trend-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .app-trend .trend-header h1 { font-size: 22px; margin: 8px 0; }

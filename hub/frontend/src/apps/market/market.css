@@ -46,7 +46,7 @@
 .app-market * { box-sizing: border-box; }
 
 /* 옛 #root 컨테이너 → 앱 콘텐츠 래퍼 */
-.app-market .market-root { max-width: 1180px; margin: 0 auto; padding: 16px 20px 48px; }
+.app-market .market-root { padding: 16px 24px 48px; }
 
 .app-market .num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-market .up { color: var(--up); }

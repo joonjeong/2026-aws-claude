@@ -17,7 +17,7 @@
   --plate: #e8837a;
 }
 
-.app-quake .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 20px 48px; }
+.app-quake .wrap { padding: 16px 24px 48px; }
 
 /* .wrap 하위로 한정 — 셸 톱바 버튼(.shell-btn)을 건드리지 않기 위함 */
 .app-quake .wrap button {
