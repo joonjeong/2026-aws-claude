@@ -1,0 +1,65 @@
+/* ── 전역 리셋 + 테마 변수 (셸 소유) ─────────────────────────── */
+* { box-sizing: border-box; margin: 0; }
+
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --text: #1a1d23; --muted: #6b7280;
+  --border: #e5e7eb; --accent: #4f46e5; --ok: #16a34a; --bad: #dc2626;
+  --up: #16a34a; --down: #dc2626;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .08);
+}
+[data-theme="dark"] {
+  --bg: #0f1117; --card: #181b23; --text: #e5e7eb; --muted: #9ca3af;
+  --border: #2a2e3a; --accent: #818cf8; --ok: #4ade80; --bad: #f87171;
+  --up: #4ade80; --down: #f87171;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .4);
+}
+
+html, body, #root { min-height: 100vh; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+button { font: inherit; color: inherit; }
+
+/* ── 셸 톱바 ──────────────────────────────────────────────── */
+.shell-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  background: var(--card); position: sticky; top: 0; z-index: 100;
+}
+.shell-title { font-weight: 600; margin-right: auto; }
+.shell-btn {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: .85rem;
+}
+.shell-btn:hover { border-color: var(--accent); }
+.shell-loading { padding: 60px; text-align: center; color: var(--muted); }
+
+/* market은 원 스펙(다크 딥네이비 단일 무드)을 스코프 내에서 고정 */
+.app-market { color-scheme: dark; }
+
+/* ── 런처 ─────────────────────────────────────────────────── */
+.launcher-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 28px; border-bottom: 1px solid var(--border);
+}
+.launcher-header h1 { font-size: 1.25rem; }
+.launcher-header h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: .85rem; }
+.launcher-grid {
+  max-width: 1080px; margin: 0 auto; padding: 36px 20px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;
+}
+.launcher-card {
+  display: block; background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px; text-align: left; cursor: pointer;
+  box-shadow: var(--shadow); transition: transform .12s ease, border-color .12s ease;
+}
+.launcher-card:hover:not(.disabled) { transform: translateY(-2px); border-color: var(--accent); }
+.launcher-card.disabled { opacity: .55; cursor: not-allowed; }
+.card-icon { font-size: 2rem; }
+.card-title { font-size: 1.05rem; font-weight: 600; margin: 10px 0 4px; }
+.card-tagline { color: var(--muted); font-size: .85rem; line-height: 1.45; min-height: 2.5em; }
+.card-status { margin-top: 14px; font-size: .78rem; display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.dot.off { background: var(--muted); }
+.launcher-empty { color: var(--muted); text-align: center; grid-column: 1 / -1; padding: 60px 0; }

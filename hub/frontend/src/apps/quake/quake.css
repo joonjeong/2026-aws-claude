@@ -1,0 +1,81 @@
+/* Quake Watch — 모든 선택자는 .app-quake 하위 네임스페이스 (셸 래퍼: .app-shell.app-quake)
+   테마 의존 색은 셸 전역 변수(--bg/--card/--text/--muted/--border/--accent) 소비,
+   quake 고유 색(깊이 그라디언트·지도 팔레트)만 로컬 변수로 유지 */
+
+.app-quake {
+  --map-bg: #eaf0f5;
+  --land: #9aa7b4;
+  --row-hover: #f0f2f5;
+  --quake-shallow: #ff8c42; /* 깊이 0km */
+  --quake-deep: #7c3aed;    /* 깊이 300km+ */
+}
+[data-theme="dark"] .app-quake {
+  --map-bg: #0c1017;
+  --land: #3d4757;
+  --row-hover: #202736;
+}
+
+.app-quake .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 20px 48px; }
+
+/* .wrap 하위로 한정 — 셸 톱바 버튼(.shell-btn)을 건드리지 않기 위함 */
+.app-quake .wrap button {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 14px; font-size: 14px; cursor: pointer;
+}
+.app-quake .wrap button:hover { border-color: var(--accent); }
+.app-quake .wrap button:disabled { opacity: .5; cursor: default; }
+
+.app-quake .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.app-quake .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.app-quake .stat .label { font-size: 12px; color: var(--muted); }
+.app-quake .stat .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+.app-quake .stat .value.small { font-size: 15px; }
+
+.app-quake .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+.app-quake .card h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+
+.app-quake .map-box { overflow-x: auto; }
+.app-quake .worldmap { width: 100%; height: auto; display: block; background: var(--map-bg); border-radius: 8px; }
+.app-quake .continent { fill: none; stroke: var(--land); stroke-width: 1.4; stroke-linejoin: round; }
+.app-quake .epi { stroke: rgba(0, 0, 0, .25); stroke-width: .5; opacity: .85; }
+.app-quake .pulse {
+  fill: none; stroke: var(--quake-shallow); stroke-width: 1.5;
+  transform-box: fill-box; transform-origin: center;
+  animation: quake-pulse 2s ease-out infinite;
+}
+@keyframes quake-pulse {
+  0%   { transform: scale(1);   opacity: .9; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
+.app-quake .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+.app-quake .legend .bar { width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--quake-shallow), var(--quake-deep)); }
+.app-quake .legend .note { margin-left: 12px; }
+
+.app-quake .filter { display: flex; align-items: center; gap: 12px; }
+.app-quake .filter .filter-label { font-size: 13px; color: var(--muted); }
+.app-quake .filter input[type="range"] { flex: 1; accent-color: var(--accent); }
+.app-quake .filter .val { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 72px; }
+
+.app-quake .brief-out { white-space: pre-wrap; line-height: 1.65; font-size: 14px; margin-top: 10px; }
+.app-quake .brief-out.err { color: var(--muted); }
+.app-quake .badge {
+  display: inline-block; font-size: 11px; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 2px 8px; margin-left: 8px;
+}
+
+.app-quake .table-box { overflow-x: auto; }
+.app-quake table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.app-quake th, .app-quake td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.app-quake td.place { white-space: normal; }
+.app-quake th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.app-quake tr:hover td { background: var(--row-hover); }
+.app-quake td.num { font-variant-numeric: tabular-nums; }
+.app-quake td.dim { color: var(--muted); }
+.app-quake .magchip {
+  display: inline-block; min-width: 40px; text-align: center; border-radius: 6px;
+  padding: 1px 6px; color: #fff; font-weight: 700; font-size: 12.5px;
+}
+
+@media (max-width: 720px) {
+  .app-quake .stats { grid-template-columns: repeat(2, 1fr); }
+}

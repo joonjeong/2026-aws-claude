@@ -1,0 +1,139 @@
+/* Market Desk — dark deep-navy single mood (원 스펙), 전부 .app-market 하위로 스코프.
+   옛 :root 변수와 body 전역 규칙은 .app-market 루트로 흡수. */
+.app-market {
+  --bg: #0a1024;
+  --bg-panel: #111a35;
+  --bg-panel-2: #16214380;
+  --border: #223058;
+  --text: #dce4f7;
+  --text-dim: #7f8db3;
+  --up: #22c55e;
+  --down: #ef4444;
+  --accent: #5b8def;
+
+  /* 옛 body { … } 전역 규칙 */
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+  font-size: 14px;
+}
+
+.app-market * { box-sizing: border-box; }
+
+/* 옛 #root 컨테이너 → 앱 콘텐츠 래퍼 */
+.app-market .market-root { max-width: 1180px; margin: 0 auto; padding: 16px 20px 48px; }
+
+.app-market .num { text-align: right; font-variant-numeric: tabular-nums; }
+.app-market .up { color: var(--up); }
+.app-market .down { color: var(--down); }
+.app-market .dim { color: var(--text-dim); }
+
+.app-market h1.app-title { font-size: 20px; margin: 8px 0 16px; letter-spacing: 0.02em; }
+.app-market h1.app-title span { color: var(--accent); }
+
+/* Indicator bar */
+.app-market .indicator-bar {
+  display: flex; flex-wrap: wrap; gap: 20px;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px; margin-bottom: 16px;
+}
+.app-market .indicator-bar .item { display: flex; gap: 8px; align-items: baseline; }
+.app-market .indicator-bar .label { color: var(--text-dim); font-size: 12px; }
+.app-market .indicator-bar .value { font-variant-numeric: tabular-nums; }
+
+/* Index cards */
+.app-market .index-cards {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+@media (max-width: 900px) { .app-market .index-cards { grid-template-columns: repeat(2, 1fr); } }
+.app-market .index-card {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.app-market .index-card .name { color: var(--text-dim); font-size: 12px; margin-bottom: 6px; }
+.app-market .index-card .price { font-size: 20px; font-variant-numeric: tabular-nums; }
+.app-market .index-card .delta { font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+
+/* Tabs */
+.app-market .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.app-market .tabs button {
+  background: transparent; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 16px; cursor: pointer; font-size: 13px;
+}
+.app-market .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Quote table */
+.app-market .quote-table-wrap {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 10px; overflow-x: auto;
+}
+.app-market table.quote-table { width: 100%; border-collapse: collapse; }
+.app-market .quote-table th, .app-market .quote-table td { padding: 9px 14px; white-space: nowrap; }
+.app-market .quote-table th {
+  text-align: left; color: var(--text-dim); font-weight: 500;
+  font-size: 12px; border-bottom: 1px solid var(--border);
+}
+.app-market .quote-table th.num { text-align: right; }
+.app-market .quote-table tbody tr { cursor: pointer; }
+.app-market .quote-table tbody tr:hover { background: var(--bg-panel-2); }
+.app-market .quote-table td { border-bottom: 1px solid #1a2547; font-variant-numeric: tabular-nums; }
+.app-market .quote-table tbody tr:last-child td { border-bottom: none; }
+.app-market .quote-table .sym { color: var(--accent); font-weight: 600; }
+
+/* Detail */
+.app-market .back-btn {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 6px 14px; cursor: pointer; margin-bottom: 14px;
+}
+.app-market .back-btn:hover { border-color: var(--accent); }
+.app-market .stock-header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.app-market .stock-header .name { font-size: 22px; font-weight: 700; }
+.app-market .stock-header .price { font-size: 26px; font-variant-numeric: tabular-nums; }
+.app-market .stock-header .delta { font-size: 15px; font-variant-numeric: tabular-nums; }
+.app-market .stock-header .vol { color: var(--text-dim); font-size: 13px; }
+
+.app-market .panel {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 14px;
+}
+.app-market .panel h3 { margin: 0 0 10px; font-size: 13px; color: var(--text-dim); font-weight: 600; }
+
+.app-market .chart-box { height: 360px; }
+
+.app-market .returns-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.app-market .returns-row .cell { text-align: center; }
+.app-market .returns-row .label { color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
+.app-market .returns-row .value { font-size: 17px; font-variant-numeric: tabular-nums; }
+
+/* 52-week bar */
+.app-market .w52-track {
+  position: relative; height: 8px; border-radius: 4px; margin: 18px 4px 6px;
+  background: linear-gradient(90deg, var(--down), #94a3b8, var(--up));
+  opacity: 0.9;
+}
+.app-market .w52-marker {
+  position: absolute; top: -5px; width: 4px; height: 18px;
+  background: #fff; border-radius: 2px; transform: translateX(-50%);
+}
+.app-market .w52-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
+
+/* AI panel */
+.app-market .ai-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.app-market .ai-btn {
+  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  padding: 7px 16px; cursor: pointer; font-size: 13px;
+}
+.app-market .ai-btn:disabled { background: #2a3a66; color: var(--text-dim); cursor: not-allowed; }
+.app-market .phase-badge {
+  font-size: 11px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--accent); color: var(--accent);
+  animation: market-pulse 1.2s ease-in-out infinite;
+}
+@keyframes market-pulse { 50% { opacity: 0.45; } }
+.app-market .ai-output { white-space: pre-wrap; line-height: 1.65; font-size: 13.5px; min-height: 20px; }
+.app-market .ai-note { color: var(--text-dim); font-size: 12.5px; }
+.app-market .error-note { color: var(--down); font-size: 12.5px; }

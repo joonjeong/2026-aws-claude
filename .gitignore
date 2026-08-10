@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+*.tsbuildinfo
+
+# 빌드 산출물 (재현: hub/frontend에서 npm run build / infra에서 cdk synth)
+hub/backend/static/app/
+cdk.out/
+
+# 로컬 도구 상태
+.playwright-mcp/
+.claude/settings.local.json
+.remember/
+
+# macOS
+.DS_Store
+
+# earthquake/는 자체 git 저장소 (설계 문서는 docs/specs/에 집결됨)
+/earthquake/

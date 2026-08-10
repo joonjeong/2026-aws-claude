@@ -1,0 +1,10 @@
+# hub unified service — superset of all module deps
+# labkit (shared layer): pip install -e ../../shared  (or the editable line below)
+-e ../../shared
+fastapi
+uvicorn[standard]
+httpx
+feedparser
+yfinance
+pykrx
+boto3

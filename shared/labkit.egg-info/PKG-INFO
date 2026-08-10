@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: labkit
+Version: 0.1.0
+Summary: Shared collector/store/LLM layer for claude-lab capstones
+Requires-Python: >=3.11
+Requires-Dist: httpx>=0.27
