@@ -14,6 +14,7 @@ uv = "latest"
 description = "의존성 설치 — backend(uv sync) + frontend(pnpm install)"
 run = [
     "uv sync --directory hub/backend",
+    "uv sync --directory hub/infra",
     "pnpm --dir hub/frontend install",
 ]
 

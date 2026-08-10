@@ -1,0 +1,12 @@
+[project]
+name = "hub-infra"
+version = "0.1.0"
+description = "claude-lab hub — CDK stack (synth/deploy via uv)"
+requires-python = ">=3.11"
+dependencies = [
+    "aws-cdk-lib>=2.150,<3",
+    "constructs>=10.0,<11",
+]
+
+[tool.uv]
+package = false
