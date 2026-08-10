@@ -22,23 +22,42 @@ from ..store.articles import ArticleStore
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """\
-너는 4개 매체(bbc=BBC World, guardian=The Guardian World, nhk=NHK 국제, \
-yna=연합뉴스 국제)의 헤드라인을 비교하는 미디어 분석가다.
+def build_system_prompt() -> str:
+    """config.SOURCES에서 매체 목록·frames/tones/sources 스키마를 생성 —
+    소스를 추가하면(보너스 카드 A) 프롬프트 계약도 자동 확장된다."""
+    ids = [s["id"] for s in config.SOURCES]
+    outlets = ", ".join(f"{s['id']}={s['name']}" for s in config.SOURCES)
+    frames = ",".join(
+        f'"{sid}":"{"이 매체의 프레임 1문장" if i == 0 else "..."}"'
+        for i, sid in enumerate(ids)
+    )
+    tones = ",".join(f'"{sid}":0' for sid in ids)
+    sources = ",".join(
+        f'"{sid}":{"[기사 인덱스]" if i == 0 else "[...]"}'
+        for i, sid in enumerate(ids)
+    )
+    return f"""\
+너는 {len(ids)}개 매체({outlets})의 헤드라인을 비교하는 미디어 분석가다.
 
 반드시 아래 스키마의 JSON "하나만" 출력한다. 코드펜스, 설명, 전후 텍스트 금지.
 
-{"clusters":[{"topic":"한국어 토픽명","summary":"공통 사실 2문장",
-  "frames":{"bbc":"이 매체의 프레임 1문장","guardian":"...","nhk":"...","yna":"..."},
-  "sources":{"bbc":[기사 인덱스],"guardian":[...],"nhk":[...],"yna":[...]}}],
- "overview":"오늘의 미디어 지형 3문장"}
+{{"clusters":[{{"topic":"한국어 토픽명","summary":"공통 사실 2문장",
+  "frames":{{{frames}}},
+  "tones":{{{tones}}},
+  "sources":{{{sources}}}}}],
+ "overview":"오늘의 미디어 지형 3문장"}}
 
 규칙:
 - 클러스터는 2개 이상 매체가 다룬 공통 토픽만 3~5개.
-- 해당 토픽을 다루지 않은 매체의 frame 값은 정확히 "미보도", sources에서 그 매체는 빈 배열.
+- 해당 토픽을 다루지 않은 매체의 frame 값은 정확히 "미보도", sources에서 그 매체는 빈 배열, \
+tones에서 그 매체는 키를 제외한다.
+- tone은 그 매체 프레임의 논조 온도로, -2(강한 비판·부정)/-1/0(중립)/+1/+2(강한 옹호·긍정) 정수만 쓴다.
 - sources의 기사 인덱스는 입력에 표기된 각 매체별 [n] 번호를 그대로 쓴다.
 - 모든 생성 텍스트는 한국어로 쓴다.
 """
+
+
+SYSTEM_PROMPT = build_system_prompt()
 
 _FENCE_RE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$", re.MULTILINE)
 

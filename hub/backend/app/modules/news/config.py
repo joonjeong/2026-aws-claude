@@ -44,6 +44,14 @@ SOURCES: list[dict] = [
         # (https://www.yna.co.kr/rss/index — 국제 feed). HTTP 200, RSS 2.0.
         "rss_url": "https://www.yna.co.kr/rss/international.xml",
     },
+    {
+        "id": "aljazeera",
+        "name": "Al Jazeera",
+        "lang": "en",
+        # Bonus card A (5th source). Confirmed 2026-08-10 via Al Jazeera's
+        # official all-news feed. HTTP 200, RSS 2.0.
+        "rss_url": "https://www.aljazeera.com/xml/rss/all.xml",
+    },
 ]
 
 # Collection

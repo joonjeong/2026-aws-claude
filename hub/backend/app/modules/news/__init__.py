@@ -10,7 +10,7 @@ from .api.routes import router  # noqa: F401  (contract export)
 META = {
     "id": "news",
     "title": "Newsroom Lens",
-    "tagline": "BBC·Guardian·NHK·연합뉴스 — 4개 매체 관점 비교 뉴스룸",
+    "tagline": "BBC·Guardian·NHK·연합뉴스·Al Jazeera — 5개 매체 관점 비교 뉴스룸",
     "icon": "📰",
 }
 
