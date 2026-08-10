@@ -1,7 +1,8 @@
 """API routes (hub module: paths are RELATIVE — hub mounts them under
 /api/market). All quote/overview/chart/detail data goes through one
 labkit.cache.TTLCache (single-flight). Cache keys per design doc:
-quotes:us / quotes:kr / overview / chart:{symbol}:{range} / detail:{symbol}.
+quotes:us / quotes:kr / overview / chart:{symbol}:{range} / detail:{symbol}
+/ orderbook:{symbol} / investors:{symbol} / news:{symbol}.
 
 Responses carry an X-Cache: HIT|MISS header (verification aid)."""
 from __future__ import annotations
@@ -13,9 +14,11 @@ from typing import Any, Awaitable, Callable
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from labkit.cache import TTLCache
+from pydantic import BaseModel
 
 from ..core import config, hours
-from ..services import ai, charts, kr, us
+from ..services import ai, charts, kr, sim, us
+from ..services import news as news_svc
 
 log = logging.getLogger("market.api")
 router = APIRouter()
@@ -108,18 +111,24 @@ async def market_quotes(response: Response) -> dict[str, Any]:
     return {**out, "errors": errors}
 
 
-@router.get("/stocks/{symbol}")
-async def stock_detail(symbol: str, response: Response) -> dict[str, Any]:
-    _require_known(symbol)
+async def _detail_cached(symbol: str) -> tuple[dict[str, Any], bool]:
+    """Cached detail fetch shared by detail/AI/orderbook/investors routes.
+    Maps LookupError -> 404, other upstream failures -> 502 (status only)."""
     market = "KR" if kr.is_kr_symbol(symbol) else "US"
     try:
-        data, hit = await _cached(f"detail:{symbol}", hours.quote_ttl(market),
-                                  lambda: charts.fetch_detail(symbol))
+        return await _cached(f"detail:{symbol}", hours.quote_ttl(market),
+                             lambda: charts.fetch_detail(symbol))
     except LookupError:
         raise HTTPException(status_code=404, detail=f"unknown symbol {symbol}")
     except Exception as exc:  # noqa: BLE001
         log.error("detail[%s] fetch failed: %r", symbol, exc)
         raise HTTPException(status_code=502, detail="upstream data source failed")
+
+
+@router.get("/stocks/{symbol}")
+async def stock_detail(symbol: str, response: Response) -> dict[str, Any]:
+    _require_known(symbol)
+    data, hit = await _detail_cached(symbol)
     _mark(response, hit)
     return data
 
@@ -142,23 +151,82 @@ async def stock_chart(symbol: str, response: Response, range: str = "1m") -> dic
     return data
 
 
+@router.get("/stocks/{symbol}/orderbook")
+async def stock_orderbook(symbol: str, response: Response) -> dict[str, Any]:
+    """SIMULATED order book — deterministic per price (see services/sim.py)."""
+    _require_known(symbol)
+    detail, _ = await _detail_cached(symbol)
+
+    async def fetch() -> dict[str, Any]:
+        return sim.build_orderbook(symbol, detail["price"], detail["volume"])
+
+    data, hit = await _cached(f"orderbook:{symbol}", config.ORDERBOOK_TTL, fetch)
+    _mark(response, hit)
+    return data
+
+
+@router.get("/stocks/{symbol}/investors")
+async def stock_investors(symbol: str, response: Response) -> dict[str, Any]:
+    """SIMULATED 10-day investor flows — deterministic per (symbol, date)."""
+    _require_known(symbol)
+    detail, _ = await _detail_cached(symbol)
+
+    async def fetch() -> dict[str, Any]:
+        return sim.build_investor_flows(symbol, detail["volume"])
+
+    data, hit = await _cached(f"investors:{symbol}", config.INVESTORS_TTL, fetch)
+    _mark(response, hit)
+    return data
+
+
+@router.get("/stocks/{symbol}/news")
+async def stock_news(symbol: str, response: Response) -> dict[str, Any]:
+    """REAL Yahoo Finance RSS headlines. Upstream failure degrades to an
+    empty list + error field (never 500) and is NOT cached."""
+    _require_known(symbol)
+    try:
+        data, hit = await _cached(f"news:{symbol}", config.NEWS_TTL,
+                                  lambda: news_svc.fetch_news(symbol))
+    except Exception as exc:  # noqa: BLE001
+        log.error("news[%s] fetch failed: %r", symbol, exc)
+        data, hit = {"symbol": symbol, "items": [],
+                     "error": type(exc).__name__}, False
+    _mark(response, hit)
+    return data
+
+
 @router.post("/ai/stocks/{symbol}")
 async def ai_analyze(symbol: str) -> StreamingResponse:
     _require_known(symbol)
     if not ai.token_present():
         # 503 BEFORE any streaming — AI panel shows disabled state
         raise HTTPException(status_code=503, detail="AWS_BEARER_TOKEN_BEDROCK not set")
-    market = "KR" if kr.is_kr_symbol(symbol) else "US"
-    try:
-        detail, _ = await _cached(f"detail:{symbol}", hours.quote_ttl(market),
-                                  lambda: charts.fetch_detail(symbol))
-    except LookupError:
-        raise HTTPException(status_code=404, detail=f"unknown symbol {symbol}")
-    except Exception as exc:  # noqa: BLE001
-        log.error("ai detail[%s] fetch failed: %r", symbol, exc)
-        raise HTTPException(status_code=502, detail="upstream data source failed")
+    detail, _ = await _detail_cached(symbol)
     return StreamingResponse(
         ai.analyze_stream(detail),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+class ArticleBody(BaseModel):
+    title: str
+    text: str | None = None
+    link: str | None = None
+
+
+@router.post("/ai/articles")
+async def ai_article(body: ArticleBody) -> StreamingResponse:
+    """Article analysis SSE. Content is never logged (see services/ai.py)."""
+    # input-size check first (413 is observable even without a token) …
+    combined = len(body.title) + len(body.text or "") + len(body.link or "")
+    if combined > config.ARTICLE_MAX_INPUT_CHARS:
+        raise HTTPException(status_code=413, detail="article input too large")
+    # … then 503 BEFORE any streaming — same contract as /ai/stocks
+    if not ai.token_present():
+        raise HTTPException(status_code=503, detail="AWS_BEARER_TOKEN_BEDROCK not set")
+    return StreamingResponse(
+        ai.article_stream(body.title, body.text, body.link),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -48,6 +48,44 @@ export interface ChartData {
   candles: Candle[];
 }
 
+export interface OrderBookLevel {
+  price: number;
+  volume: number;
+}
+
+export interface OrderBook {
+  symbol: string;
+  price: number;
+  simulated: true;
+  asks: OrderBookLevel[]; // 10 levels, highest price first
+  bids: OrderBookLevel[]; // 10 levels, highest price first
+}
+
+export interface InvestorDay {
+  date: string;
+  individual: number;
+  foreign: number;
+  institution: number;
+}
+
+export interface InvestorFlows {
+  symbol: string;
+  simulated: true;
+  days: InvestorDay[]; // 10 weekdays, oldest first
+}
+
+export interface NewsItem {
+  title: string;
+  link: string;
+  published: string;
+}
+
+export interface StockNews {
+  symbol: string;
+  items: NewsItem[];
+  error: string | null;
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
@@ -60,6 +98,12 @@ export const fetchDetail = (symbol: string) =>
   getJson<StockDetail>(`/api/market/stocks/${encodeURIComponent(symbol)}`);
 export const fetchChart = (symbol: string, range: string) =>
   getJson<ChartData>(`/api/market/stocks/${encodeURIComponent(symbol)}/chart?range=${range}`);
+export const fetchOrderBook = (symbol: string) =>
+  getJson<OrderBook>(`/api/market/stocks/${encodeURIComponent(symbol)}/orderbook`);
+export const fetchInvestors = (symbol: string) =>
+  getJson<InvestorFlows>(`/api/market/stocks/${encodeURIComponent(symbol)}/investors`);
+export const fetchNews = (symbol: string) =>
+  getJson<StockNews>(`/api/market/stocks/${encodeURIComponent(symbol)}/news`);
 
 export const fmtNum = (n: number, digits = 2) =>
   n.toLocaleString(undefined, { maximumFractionDigits: digits });

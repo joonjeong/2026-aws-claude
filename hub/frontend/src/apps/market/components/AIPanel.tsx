@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { streamSse } from "../api/sse";
+import Markdown from "./md";
 
 type Phase = "idle" | "fetching" | "analyzing" | "done" | "disabled" | "error";
 
-/** Raw fetch + stream reader — deliberately NOT react-query: SSE deltas are
- * incremental, react-query caches completed results. Typewriter accumulation. */
+/** Stock AI analysis — abort-able SSE reader (shared api/sse.ts helper);
+ * accumulated text is re-rendered through the markdown module on every
+ * delta, keeping the typewriter feel with formatted output. */
 export default function AIPanel({ symbol }: { symbol: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [text, setText] = useState("");
@@ -27,57 +30,27 @@ export default function AIPanel({ symbol }: { symbol: string }) {
     setErrorStatus(null);
     setPhase("fetching");
 
-    let res: Response;
     try {
-      res = await fetch(`/api/market/ai/stocks/${encodeURIComponent(symbol)}`, {
-        method: "POST",
-        signal: ctrl.signal,
-      });
-    } catch {
-      setPhase("error");
-      return;
-    }
-    if (res.status === 503) {
-      setPhase("disabled"); // Bedrock token unset — panel disabled
-      return;
-    }
-    if (!res.ok || !res.body) {
-      setErrorStatus(res.status);
-      setPhase("error");
-      return;
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const frames = buf.split("\n\n");
-        buf = frames.pop() ?? "";
-        for (const frame of frames) {
-          let event = "message";
-          let data = "";
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("event:")) event = line.slice(6).trim();
-            else if (line.startsWith("data:")) data += line.slice(5).trim();
-          }
-          if (!data) continue;
-          const payload = JSON.parse(data);
-          if (event === "phase") {
-            setPhase(payload.phase as Phase);
-          } else if (event === "delta") {
-            setText((t) => t + payload.text); // typewriter accumulation
-          } else if (event === "final") {
-            setText(payload.text);
+      const status = await streamSse(
+        `/api/market/ai/stocks/${encodeURIComponent(symbol)}`,
+        { method: "POST", signal: ctrl.signal },
+        {
+          onPhase: (p) => setPhase(p as Phase),
+          onDelta: (t) => setText((cur) => cur + t), // typewriter accumulation
+          onFinal: (t) => {
+            setText(t);
             setPhase("done");
-          } else if (event === "error") {
-            setErrorStatus(payload.status);
+          },
+          onError: (s) => {
+            setErrorStatus(s);
             setPhase("error");
-          }
-        }
+          },
+        },
+      );
+      if (status === 503) setPhase("disabled"); // Bedrock token unset
+      else if (status !== 200) {
+        setErrorStatus(status);
+        setPhase("error");
       }
     } catch {
       if (!ctrl.signal.aborted) setPhase("error");
@@ -109,7 +82,11 @@ export default function AIPanel({ symbol }: { symbol: string }) {
           AI 분석 실패{errorStatus ? ` (HTTP ${errorStatus})` : ""}
         </div>
       )}
-      {text && <div className="ai-output">{text}</div>}
+      {text && (
+        <div className="ai-output">
+          <Markdown text={text} />
+        </div>
+      )}
     </div>
   );
 }

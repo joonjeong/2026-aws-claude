@@ -1,15 +1,22 @@
-/* Market Desk — dark deep-navy single mood (원 스펙), 전부 .app-market 하위로 스코프.
-   옛 :root 변수와 body 전역 규칙은 .app-market 루트로 흡수. */
+/* Market Desk — 듀얼 테마 (랩 보너스), 전부 .app-market 하위로 스코프.
+   셸이 <html data-theme>를 소유; 앱은 팔레트만 정의해 반응한다.
+   기본(및 data-theme="dark")은 원 스펙의 다크 딥네이비, light는 아래 오버라이드.
+   셸 index.css의 .app-market { color-scheme: light dark; }와 짝을 이룬다. */
 .app-market {
+  /* deep-navy dark palette — default AND [data-theme="dark"] */
   --bg: #0a1024;
   --bg-panel: #111a35;
   --bg-panel-2: #16214380;
   --border: #223058;
+  --grid: #1a2547;
   --text: #dce4f7;
   --text-dim: #7f8db3;
   --up: #22c55e;
   --down: #ef4444;
   --accent: #5b8def;
+  --marker: #ffffff;
+  --btn-disabled: #2a3a66;
+  --badge-bg: #5b8def22;
 
   /* 옛 body { … } 전역 규칙 */
   min-height: 100vh;
@@ -18,6 +25,22 @@
   color: var(--text);
   font-family: "Inter", -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
   font-size: 14px;
+}
+
+:root[data-theme="light"] .app-market {
+  --bg: #eef2f9;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #e9eefa;
+  --border: #d4ddef;
+  --grid: #e5eaf6;
+  --text: #1b2340;
+  --text-dim: #5d6a8c;
+  --up: #16a34a;
+  --down: #dc2626;
+  --accent: #3663d8;
+  --marker: #1b2340;
+  --btn-disabled: #c9d4ea;
+  --badge-bg: #3663d81a;
 }
 
 .app-market * { box-sizing: border-box; }
@@ -33,13 +56,13 @@
 .app-market h1.app-title { font-size: 20px; margin: 8px 0 16px; letter-spacing: 0.02em; }
 .app-market h1.app-title span { color: var(--accent); }
 
-/* Indicator bar */
+/* Indicator bar — 11 items wrap gracefully into rows */
 .app-market .indicator-bar {
-  display: flex; flex-wrap: wrap; gap: 20px;
+  display: flex; flex-wrap: wrap; gap: 10px 20px;
   background: var(--bg-panel); border: 1px solid var(--border);
   border-radius: 10px; padding: 10px 16px; margin-bottom: 16px;
 }
-.app-market .indicator-bar .item { display: flex; gap: 8px; align-items: baseline; }
+.app-market .indicator-bar .item { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
 .app-market .indicator-bar .label { color: var(--text-dim); font-size: 12px; }
 .app-market .indicator-bar .value { font-variant-numeric: tabular-nums; }
 
@@ -80,7 +103,7 @@
 .app-market .quote-table th.num { text-align: right; }
 .app-market .quote-table tbody tr { cursor: pointer; }
 .app-market .quote-table tbody tr:hover { background: var(--bg-panel-2); }
-.app-market .quote-table td { border-bottom: 1px solid #1a2547; font-variant-numeric: tabular-nums; }
+.app-market .quote-table td { border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
 .app-market .quote-table tbody tr:last-child td { border-bottom: none; }
 .app-market .quote-table .sym { color: var(--accent); font-weight: 600; }
 
@@ -117,9 +140,74 @@
 }
 .app-market .w52-marker {
   position: absolute; top: -5px; width: 4px; height: 18px;
-  background: #fff; border-radius: 2px; transform: translateX(-50%);
+  background: var(--marker); border-radius: 2px; transform: translateX(-50%);
 }
 .app-market .w52-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
+
+/* Simulation badge (orderbook / investor panels) */
+.app-market .sim-badge {
+  font-size: 10px; font-weight: 500; padding: 2px 8px; margin-left: 6px;
+  border-radius: 999px; border: 1px solid var(--border);
+  background: var(--badge-bg); color: var(--text-dim);
+  vertical-align: 1px; letter-spacing: 0.03em;
+}
+
+/* Order book — two-column ask/bid ladder with volume bars */
+.app-market .ob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 700px) { .app-market .ob-grid { grid-template-columns: 1fr; } }
+.app-market .ob-head { font-size: 12px; margin-bottom: 6px; font-weight: 600; }
+.app-market .ob-row {
+  position: relative; display: flex; justify-content: space-between;
+  align-items: center; padding: 3px 8px; font-size: 12.5px;
+  font-variant-numeric: tabular-nums; border-radius: 4px; overflow: hidden;
+}
+.app-market .ob-bar {
+  position: absolute; top: 0; bottom: 0; right: 0;
+  border-radius: 4px; opacity: 0.16; pointer-events: none;
+}
+.app-market .ob-bar.ask { background: var(--down); }
+.app-market .ob-bar.bid { background: var(--up); }
+.app-market .ob-price, .app-market .ob-vol { position: relative; }
+.app-market .ob-mid {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--grid);
+  text-align: center; font-size: 13px; font-variant-numeric: tabular-nums;
+}
+
+/* Investor flows — 10-day 3-series signed bars */
+.app-market .inv-wrap { overflow-x: auto; }
+.app-market table.inv-table { width: 100%; border-collapse: collapse; }
+.app-market .inv-table th {
+  text-align: left; color: var(--text-dim); font-weight: 500; font-size: 12px;
+  padding: 4px 10px; border-bottom: 1px solid var(--border);
+}
+.app-market .inv-table td { padding: 4px 10px; border-bottom: 1px solid var(--grid); font-size: 12.5px; white-space: nowrap; }
+.app-market .inv-table tbody tr:last-child td { border-bottom: none; }
+.app-market .inv-cell { min-width: 120px; }
+.app-market .inv-num { font-variant-numeric: tabular-nums; font-size: 12px; }
+.app-market .inv-track { height: 4px; border-radius: 2px; background: var(--bg-panel-2); margin-top: 3px; }
+.app-market .inv-bar { height: 100%; border-radius: 2px; }
+.app-market .inv-bar.up { background: var(--up); }
+.app-market .inv-bar.down { background: var(--down); }
+.app-market .inv-bar.dim { background: var(--text-dim); }
+
+/* News panel */
+.app-market .news-list { list-style: none; margin: 0; padding: 0; }
+.app-market .news-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 2px; border-bottom: 1px solid var(--grid);
+}
+.app-market .news-item:last-child { border-bottom: none; }
+.app-market .news-main { flex: 1; min-width: 0; }
+.app-market .news-item a { color: var(--text); text-decoration: none; font-size: 13.5px; line-height: 1.4; }
+.app-market .news-item a:hover { color: var(--accent); text-decoration: underline; }
+.app-market .news-date { font-size: 11.5px; margin-top: 2px; }
+.app-market .analyze-btn {
+  background: transparent; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 4px 12px; cursor: pointer; font-size: 12px; flex: none;
+}
+.app-market .analyze-btn:hover:not(:disabled) { background: var(--badge-bg); }
+.app-market .analyze-btn:disabled { color: var(--text-dim); border-color: var(--border); cursor: not-allowed; }
+.app-market .article-analysis { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 
 /* AI panel */
 .app-market .ai-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -127,13 +215,29 @@
   background: var(--accent); color: #fff; border: none; border-radius: 8px;
   padding: 7px 16px; cursor: pointer; font-size: 13px;
 }
-.app-market .ai-btn:disabled { background: #2a3a66; color: var(--text-dim); cursor: not-allowed; }
+.app-market .ai-btn:disabled { background: var(--btn-disabled); color: var(--text-dim); cursor: not-allowed; }
 .app-market .phase-badge {
   font-size: 11px; padding: 3px 10px; border-radius: 999px;
   border: 1px solid var(--accent); color: var(--accent);
   animation: market-pulse 1.2s ease-in-out infinite;
 }
 @keyframes market-pulse { 50% { opacity: 0.45; } }
-.app-market .ai-output { white-space: pre-wrap; line-height: 1.65; font-size: 13.5px; min-height: 20px; }
+.app-market .ai-output { line-height: 1.65; font-size: 13.5px; min-height: 20px; }
 .app-market .ai-note { color: var(--text-dim); font-size: 12.5px; }
 .app-market .error-note { color: var(--down); font-size: 12.5px; }
+
+/* Markdown output (md.tsx) — AI 분석 + 기사 분석 공용 */
+.app-market .md-body p { margin: 0 0 8px; }
+.app-market .md-body p:last-child { margin-bottom: 0; }
+.app-market .md-body .md-h2 {
+  font-size: 13.5px; color: var(--accent); font-weight: 700;
+  margin: 12px 0 6px; letter-spacing: 0.01em;
+}
+.app-market .md-body .md-h3 { font-size: 13px; color: var(--text); font-weight: 600; margin: 10px 0 4px; }
+.app-market .md-body ul, .app-market .md-body ol { margin: 0 0 8px; padding-left: 20px; }
+.app-market .md-body li { margin: 2px 0; }
+.app-market .md-body code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+  background: var(--bg-panel-2); border: 1px solid var(--grid);
+  border-radius: 4px; padding: 1px 5px;
+}

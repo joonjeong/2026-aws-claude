@@ -35,8 +35,8 @@ button { font: inherit; color: inherit; }
 .shell-btn:hover { border-color: var(--accent); }
 .shell-loading { padding: 60px; text-align: center; color: var(--muted); }
 
-/* market은 원 스펙(다크 딥네이비 단일 무드)을 스코프 내에서 고정 */
-.app-market { color-scheme: dark; }
+/* market은 랩 보너스로 듀얼 테마 전환 — 팔레트는 앱 스코프(market.css)가 소유 */
+.app-market { color-scheme: light dark; }
 
 /* ── 런처 ─────────────────────────────────────────────────── */
 .launcher-header {

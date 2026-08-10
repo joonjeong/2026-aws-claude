@@ -4,6 +4,9 @@ import { fetchChart, fetchDetail, fmtNum, fmtVolume, StockDetail as Detail } fro
 import Delta from "./Delta";
 import CandleChart from "./CandleChart";
 import AIPanel from "./AIPanel";
+import OrderBook from "./OrderBook";
+import InvestorPanel from "./InvestorPanel";
+import NewsPanel from "./NewsPanel";
 
 const RANGES = ["1w", "1m", "3m", "1y"] as const;
 type Range = (typeof RANGES)[number];
@@ -110,6 +113,9 @@ export default function StockDetail({
           </div>
           <ReturnsRow d={detail.data} />
           <Week52Bar d={detail.data} />
+          <OrderBook symbol={symbol} />
+          <InvestorPanel symbol={symbol} />
+          <NewsPanel symbol={symbol} />
           <AIPanel symbol={symbol} />
         </>
       )}

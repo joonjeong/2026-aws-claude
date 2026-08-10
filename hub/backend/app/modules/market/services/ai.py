@@ -48,6 +48,14 @@ _SYSTEM = (
     "투자 권유가 아닌 정보 제공임을 한 줄로 덧붙인다."
 )
 
+_ARTICLE_SYSTEM = (
+    "너는 한국어로 답하는 금융 뉴스 애널리스트다. 제공된 기사 정보만 근거로 "
+    "간결한 마크다운으로 다음 세 섹션을 작성한다: "
+    "## 핵심 요약 (기사가 한국어가 아니면 한국어 번역 요지를 먼저 제시), "
+    "## 시장·종목 영향, ## 리스크. "
+    "투자 권유가 아닌 정보 제공임을 한 줄로 덧붙인다."
+)
+
 
 def _user_prompt(detail: dict[str, Any]) -> str:
     return (
@@ -63,17 +71,19 @@ def _user_prompt(detail: dict[str, Any]) -> str:
     )
 
 
-def _stream_worker(detail: dict[str, Any], loop: asyncio.AbstractEventLoop,
+def _stream_worker(system: str, prompt: str, loop: asyncio.AbstractEventLoop,
                    queue: asyncio.Queue) -> None:
-    """Blocking converse_stream iteration in a thread; pushes to async queue."""
+    """Blocking converse_stream iteration in a thread; pushes to async queue.
+
+    Never logs prompt/article content — errors carry status codes only."""
     def put(item: tuple[str, Any]) -> None:
         loop.call_soon_threadsafe(queue.put_nowait, item)
 
     try:
         resp = _get_client().converse_stream(
             modelId=config.BEDROCK_MODEL_ID,
-            system=[{"text": _SYSTEM}],
-            messages=[{"role": "user", "content": [{"text": _user_prompt(detail)}]}],
+            system=[{"text": system}],
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
             inferenceConfig={"maxTokens": config.BEDROCK_MAX_TOKENS},
         )
         for event in resp["stream"]:
@@ -91,15 +101,17 @@ def _stream_worker(detail: dict[str, Any], loop: asyncio.AbstractEventLoop,
         put(("error", int(status)))
 
 
-async def analyze_stream(detail: dict[str, Any]) -> AsyncIterator[str]:
-    """SSE event stream: phase(fetching→analyzing) → delta* → final."""
+async def _converse_sse(system: str, prompt: str) -> AsyncIterator[str]:
+    """Shared SSE machinery: phase(fetching→analyzing) → delta* → final.
+
+    Used by BOTH the stock analysis and the article analysis streams."""
     yield _sse("phase", {"phase": "fetching"})
-    # detail is already fetched by the route (cached); transition immediately
+    # inputs are already in hand when this runs; transition immediately
     yield _sse("phase", {"phase": "analyzing"})
 
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
-    threading.Thread(target=_stream_worker, args=(detail, loop, queue),
+    threading.Thread(target=_stream_worker, args=(system, prompt, loop, queue),
                      daemon=True).start()
 
     parts: list[str] = []
@@ -114,3 +126,22 @@ async def analyze_stream(detail: dict[str, Any]) -> AsyncIterator[str]:
         else:  # done
             yield _sse("final", {"text": "".join(parts)})
             return
+
+
+def analyze_stream(detail: dict[str, Any]) -> AsyncIterator[str]:
+    """Stock analysis SSE stream (detail already fetched by the route)."""
+    return _converse_sse(_SYSTEM, _user_prompt(detail))
+
+
+def article_stream(title: str, text: str | None, link: str | None) -> AsyncIterator[str]:
+    """Article analysis SSE stream. Full text is optional (RSS gives
+    title+link); the model is told when only the headline is available."""
+    parts = [f"기사 제목: {title}"]
+    if link:
+        parts.append(f"링크: {link}")
+    if text:
+        parts.append(f"본문:\n{text}")
+    else:
+        parts.append("본문 없음 — 제목(과 링크)만으로 분석하라.")
+    parts.append("위 기사를 분석하라.")
+    return _converse_sse(_ARTICLE_SYSTEM, "\n".join(parts))

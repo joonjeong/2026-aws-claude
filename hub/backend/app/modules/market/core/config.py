@@ -1,56 +1,56 @@
 """Market Desk constants: symbol lists, indices, indicators, cache TTLs.
 
-Symbol lists are PLACEHOLDERS (liquid large-caps) — the user will supply the
-real US 50 + KR 50 lists later. Only the ACTIVE_* slices (20 + 20) are used.
+Symbol lists are the REAL lab lists (Capstone 2 "Market Desk on Web") —
+US 50 + KR 50, list order fixed. Only the ACTIVE_* slices (20 + 20) are used.
 """
 from __future__ import annotations
 
 from labkit.config import env_int
 
 # ---------------------------------------------------------------------------
-# US symbols — 50 placeholder liquid large-caps (real list to be supplied later)
+# US symbols — real lab list (order fixed; first 20 = active slice)
 # ---------------------------------------------------------------------------
 US_SYMBOLS: list[tuple[str, str]] = [
-    ("AAPL", "Apple"), ("MSFT", "Microsoft"), ("NVDA", "NVIDIA"),
-    ("GOOGL", "Alphabet"), ("AMZN", "Amazon"), ("META", "Meta Platforms"),
-    ("TSLA", "Tesla"), ("AVGO", "Broadcom"), ("BRK-B", "Berkshire Hathaway"),
-    ("JPM", "JPMorgan Chase"), ("LLY", "Eli Lilly"), ("V", "Visa"),
-    ("UNH", "UnitedHealth"), ("XOM", "Exxon Mobil"), ("MA", "Mastercard"),
-    ("COST", "Costco"), ("HD", "Home Depot"), ("PG", "Procter & Gamble"),
-    ("JNJ", "Johnson & Johnson"), ("WMT", "Walmart"), ("NFLX", "Netflix"),
-    ("ABBV", "AbbVie"), ("CRM", "Salesforce"), ("BAC", "Bank of America"),
-    ("ORCL", "Oracle"), ("CVX", "Chevron"), ("MRK", "Merck"),
-    ("KO", "Coca-Cola"), ("AMD", "AMD"), ("PEP", "PepsiCo"),
-    ("TMO", "Thermo Fisher"), ("ADBE", "Adobe"), ("CSCO", "Cisco"),
-    ("ACN", "Accenture"), ("LIN", "Linde"), ("MCD", "McDonald's"),
-    ("ABT", "Abbott"), ("WFC", "Wells Fargo"), ("IBM", "IBM"),
-    ("GE", "GE Aerospace"), ("TXN", "Texas Instruments"), ("QCOM", "Qualcomm"),
-    ("INTU", "Intuit"), ("CAT", "Caterpillar"), ("DIS", "Disney"),
-    ("VZ", "Verizon"), ("AXP", "American Express"), ("AMGN", "Amgen"),
-    ("PM", "Philip Morris"), ("GS", "Goldman Sachs"),
+    ("AAPL", "Apple"), ("MSFT", "Microsoft"), ("GOOGL", "Alphabet"),
+    ("AMZN", "Amazon"), ("NVDA", "NVIDIA"), ("META", "Meta Platforms"),
+    ("TSLA", "Tesla"), ("BRK-B", "Berkshire Hathaway"), ("JPM", "JPMorgan Chase"),
+    ("V", "Visa"), ("JNJ", "Johnson & Johnson"), ("UNH", "UnitedHealth"),
+    ("WMT", "Walmart"), ("MA", "Mastercard"), ("PG", "Procter & Gamble"),
+    ("HD", "Home Depot"), ("XOM", "Exxon Mobil"), ("CVX", "Chevron"),
+    ("LLY", "Eli Lilly"), ("ABBV", "AbbVie"), ("PFE", "Pfizer"),
+    ("KO", "Coca-Cola"), ("PEP", "PepsiCo"), ("MRK", "Merck"),
+    ("COST", "Costco"), ("AVGO", "Broadcom"), ("AMD", "AMD"),
+    ("ORCL", "Oracle"), ("CRM", "Salesforce"), ("NFLX", "Netflix"),
+    ("ADBE", "Adobe"), ("CSCO", "Cisco"), ("ACN", "Accenture"),
+    ("TXN", "Texas Instruments"), ("INTC", "Intel"), ("QCOM", "Qualcomm"),
+    ("INTU", "Intuit"), ("AMAT", "Applied Materials"), ("BKNG", "Booking Holdings"),
+    ("ISRG", "Intuitive Surgical"), ("MDLZ", "Mondelez"), ("ADP", "ADP"),
+    ("REGN", "Regeneron"), ("VRTX", "Vertex Pharmaceuticals"), ("GILD", "Gilead Sciences"),
+    ("PANW", "Palo Alto Networks"), ("LRCX", "Lam Research"), ("MU", "Micron"),
+    ("KLAC", "KLA"), ("SNPS", "Synopsys"),
 ]
 
 # ---------------------------------------------------------------------------
-# KR symbols — 50 placeholder liquid large-caps (real list to be supplied later)
+# KR symbols — real lab list (order fixed; first 20 = active slice)
 # ---------------------------------------------------------------------------
 KR_SYMBOLS: list[tuple[str, str]] = [
     ("005930", "삼성전자"), ("000660", "SK하이닉스"), ("373220", "LG에너지솔루션"),
-    ("207940", "삼성바이오로직스"), ("005380", "현대차"), ("000270", "기아"),
-    ("068270", "셀트리온"), ("005490", "POSCO홀딩스"), ("035420", "NAVER"),
-    ("051910", "LG화학"), ("006400", "삼성SDI"), ("003670", "포스코퓨처엠"),
-    ("035720", "카카오"), ("012330", "현대모비스"), ("028260", "삼성물산"),
-    ("105560", "KB금융"), ("055550", "신한지주"), ("066570", "LG전자"),
-    ("032830", "삼성생명"), ("015760", "한국전력"), ("086790", "하나금융지주"),
-    ("034730", "SK"), ("011200", "HMM"), ("096770", "SK이노베이션"),
-    ("003550", "LG"), ("017670", "SK텔레콤"), ("030200", "KT"),
-    ("316140", "우리금융지주"), ("033780", "KT&G"), ("009150", "삼성전기"),
-    ("018260", "삼성에스디에스"), ("010130", "고려아연"), ("051900", "LG생활건강"),
-    ("090430", "아모레퍼시픽"), ("047050", "포스코인터내셔널"), ("010950", "S-Oil"),
-    ("024110", "기업은행"), ("011070", "LG이노텍"), ("000810", "삼성화재"),
-    ("161390", "한국타이어앤테크놀로지"), ("352820", "하이브"), ("259960", "크래프톤"),
-    ("036570", "엔씨소프트"), ("251270", "넷마블"), ("022100", "포스코DX"),
-    ("042700", "한미반도체"), ("000100", "유한양행"), ("128940", "한미약품"),
-    ("009830", "한화솔루션"), ("010140", "삼성중공업"),
+    ("005380", "현대차"), ("000270", "기아"), ("207940", "삼성바이오로직스"),
+    ("006400", "삼성SDI"), ("035420", "NAVER"), ("035720", "카카오"),
+    ("005490", "POSCO홀딩스"), ("068270", "셀트리온"), ("028260", "삼성물산"),
+    ("105560", "KB금융"), ("055550", "신한지주"), ("012330", "현대모비스"),
+    ("066570", "LG전자"), ("003670", "포스코퓨처엠"), ("051910", "LG화학"),
+    ("096770", "SK이노베이션"), ("034730", "SK"), ("000810", "삼성화재"),
+    ("003550", "LG"), ("032830", "삼성생명"), ("009150", "삼성전기"),
+    ("086790", "하나금융지주"), ("010130", "고려아연"), ("033780", "KT&G"),
+    ("011200", "HMM"), ("247540", "에코프로비엠"), ("377300", "카카오페이"),
+    ("030200", "KT"), ("017670", "SK텔레콤"), ("018260", "삼성에스디에스"),
+    ("036570", "엔씨소프트"), ("316140", "우리금융지주"), ("003490", "HD한국조선해양"),
+    ("034020", "두산에너빌리티"), ("011170", "롯데케미칼"), ("024110", "기업은행"),
+    ("010950", "S-Oil"), ("006800", "미래에셋증권"), ("004020", "현대제철"),
+    ("000720", "현대건설"), ("002790", "아모레G"), ("138040", "메리츠금융지주"),
+    ("259960", "크래프톤"), ("326030", "SK바이오팜"), ("323410", "카카오뱅크"),
+    ("361610", "SK아이이테크놀로지"), ("352820", "하이브"),
 ]
 
 # Active slice sizes — full 50+50 stays above; open up via env or edit here.
@@ -70,12 +70,18 @@ INDICES: list[tuple[str, str, str]] = [  # (yf ticker, display name, market)
     ("^KQ11", "KOSDAQ", "KR"),
 ]
 
-INDICATORS: list[tuple[str, str]] = [  # (yf ticker, display name)
-    ("DX-Y.NYB", "달러인덱스"),
-    ("^TNX", "미 10년물"),
-    ("CL=F", "WTI"),
+INDICATORS: list[tuple[str, str]] = [  # (yf ticker, display name) — lab 11종
+    ("CL=F", "WTI유"),
     ("GC=F", "금"),
+    ("SI=F", "은"),
+    ("HG=F", "구리"),
+    ("EURUSD=X", "EUR/USD"),
     ("KRW=X", "USD/KRW"),
+    ("JPY=X", "USD/JPY"),
+    ("CNY=X", "USD/CNY"),
+    ("^TNX", "미 10년물"),
+    ("BTC-USD", "비트코인"),
+    ("ETH-USD", "이더리움"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -84,6 +90,19 @@ INDICATORS: list[tuple[str, str]] = [  # (yf ticker, display name)
 TTL_OPEN = env_int("MARKET_TTL_OPEN", 45)
 TTL_CLOSED = env_int("MARKET_TTL_CLOSED", 600)
 CHART_TTL: dict[str, int] = {"1w": 300, "1m": 900, "3m": 3600, "1y": 3600}
+ORDERBOOK_TTL = 45   # simulated order book (per symbol)
+INVESTORS_TTL = 600  # simulated 10-day investor flows (per symbol)
+NEWS_TTL = 300       # Yahoo Finance RSS headlines (per symbol)
+
+# Per-symbol news feed (real): Yahoo Finance RSS. KR codes get a ".KS" suffix.
+NEWS_RSS_URL = (
+    "https://feeds.finance.yahoo.com/rss/2.0/headline"
+    "?s={symbol}&region=US&lang=en-US"
+)
+NEWS_MAX_ITEMS = 5
+
+# POST /ai/articles input cap (title + text + link, chars) — 413 if over
+ARTICLE_MAX_INPUT_CHARS = 6000
 
 # Bedrock (AI panel)
 BEDROCK_MODEL_ID = "global.anthropic.claude-sonnet-4-6"
