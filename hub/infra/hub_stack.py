@@ -54,13 +54,19 @@ class HubStack(Stack):
         if image_uri:
             container_image = ecs.ContainerImage.from_registry(image_uri)
         else:
+            # APPS는 Dockerfile RUN의 셸 변수로 들어가므로 모듈 id 허용 목록으로
+            # 검증 (임의 문자열이 빌드 컨테이너에서 명령으로 실행되는 것 차단)
+            apps = self.node.try_get_context("apps") or "quake,news,trend,market"
+            allowed = {"quake", "news", "trend", "market"}
+            parts = [p.strip() for p in apps.split(",") if p.strip()]
+            if not parts or not set(parts) <= allowed:
+                raise ValueError(
+                    f"-c apps must be a comma list of {sorted(allowed)}, got {apps!r}"
+                )
             container_image = ecs.ContainerImage.from_asset(
                 directory=str(REPO_ROOT),
                 file="hub/Dockerfile",
-                build_args={
-                    "APPS": self.node.try_get_context("apps")
-                    or "quake,news,trend,market"
-                },
+                build_args={"APPS": ",".join(parts)},
                 # Fargate 기본 아키텍처는 amd64 — Apple Silicon 로컬 빌드 대비 명시
                 platform=ecr_assets.Platform.LINUX_AMD64,
             )
@@ -181,6 +187,11 @@ class HubStack(Stack):
                 path="/healthz", healthy_http_codes="200"
             ),
         )
+        # 보안 노트: unsafe_unwrap()은 평문이 아니라 CloudFormation 동적 참조로
+        # 렌더링된다({{resolve:secretsmanager:...}} — 템플릿·코드에 값 없음).
+        # 잔여 노출: elbv2:DescribeRules / cloudfront:GetDistributionConfig 권한이
+        # 있는 IAM 주체는 배포 후 헤더 값을 읽을 수 있다 — X-Origin-Verify 패턴의
+        # 수용된 특성(오리진 직접 접근 차단용이지 기밀 데이터가 아님).
         # unsafe_unwrap() renders as a CloudFormation dynamic reference
         # ({{resolve:secretsmanager:...}}) in the template — not plaintext.
         listener.add_action(
