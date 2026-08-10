@@ -8,6 +8,7 @@
 node = "24"
 pnpm = "latest"
 uv = "latest"
+"npm:aws-cdk" = "latest"   # CDK CLI — aws-cdk-lib(스키마 54+)와 호환되는 최신 유지
 
 [tasks.setup]
 description = "의존성 설치 — backend(uv sync) + frontend(pnpm install)"
@@ -46,4 +47,19 @@ depends = ["frontend:dev"]
 [tasks."infra:synth"]
 description = "CDK 스택 synth 검증 (hub/infra 자체 venv 사용)"
 dir = "hub/infra"
-run = "npx -y aws-cdk@2 synth --quiet"
+run = "cdk synth --quiet"
+
+[tasks."infra:bootstrap"]
+description = "CDK 부트스트랩 (계정/리전 최초 1회, AWS 자격증명 필요)"
+dir = "hub/infra"
+run = "cdk bootstrap"
+
+[tasks."infra:diff"]
+description = "배포 전 변경분 확인 (env: IMAGE_URI 선택)"
+dir = "hub/infra"
+run = 'cdk diff ${IMAGE_URI:+-c image_uri=$IMAGE_URI}'
+
+[tasks."infra:deploy"]
+description = "CloudFront→ALB→Fargate 실배포 (env: IMAGE_URI=ECR 이미지 URI 필수)"
+dir = "hub/infra"
+run = 'cdk deploy -c image_uri=${IMAGE_URI:?"IMAGE_URI를 지정하세요 — 예: docker build -f hub/Dockerfile -t <ecr>/claude-lab-hub . && docker push 후 그 URI"}'
