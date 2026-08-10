@@ -46,9 +46,11 @@ run = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
 depends = ["frontend:dev"]
 
 [tasks."infra:synth"]
-description = "CDK 템플릿 검증 — docker 불요 경로(placeholder 이미지)로 빠르게"
+description = "CDK 템플릿 검증 — docker·자격증명 불요 경로(placeholder 이미지·prefix list)"
 dir = "hub/infra"
-run = "cdk synth --quiet -c image_uri=public.ecr.aws/docker/library/python:3.11-slim"
+run = """cdk synth --quiet \
+  -c image_uri=public.ecr.aws/docker/library/python:3.11-slim \
+  -c cloudfront_prefix_list_id=pl-00000000"""
 
 [tasks."infra:bootstrap"]
 description = "CDK 부트스트랩 (계정/리전 최초 1회, AWS 자격증명 필요)"
@@ -56,11 +58,45 @@ dir = "hub/infra"
 run = "cdk bootstrap"
 
 [tasks."infra:diff"]
-description = "배포 전 변경분 확인 (env: IMAGE_URI 선택)"
+description = "배포 전 변경분 확인 (env: IMAGE_URI, ARCH 선택)"
 dir = "hub/infra"
-run = 'cdk diff ${IMAGE_URI:+-c image_uri=$IMAGE_URI}'
+run = 'cdk diff ${IMAGE_URI:+-c image_uri=$IMAGE_URI} ${ARCH:+-c arch=$ARCH}'
 
 [tasks."infra:deploy"]
-description = "실배포 — 기본은 CDK가 Dockerfile 빌드→자산 ECR push→Fargate까지 (docker 필요). env: IMAGE_URI=사전 빌드 이미지(선택), APPS=프론트 번들 앱 선택"
+description = "실배포 — 기본은 CDK가 Dockerfile 빌드→자산 ECR push→Fargate까지 (docker 필요). env: IMAGE_URI=사전 빌드 이미지(선택), APPS=프론트 번들 앱 선택, ARCH=arm64(기본)|amd64 — 이미지·Fargate 아키텍처(빌드 호스트와 맞춰야 함, 다르면 qemu binfmt 필요)"
 dir = "hub/infra"
-run = 'cdk deploy ${IMAGE_URI:+-c image_uri=$IMAGE_URI} ${APPS:+-c apps=$APPS}'
+run = 'cdk deploy ${IMAGE_URI:+-c image_uri=$IMAGE_URI} ${APPS:+-c apps=$APPS} ${ARCH:+-c arch=$ARCH}'
+
+[tasks."infra:secret"]
+description = "배포된 BedrockBearerToken 시크릿에 .env의 AWS_BEARER_TOKEN_BEDROCK 값을 등록 (env: ENV_FILE=기본 ~/capstone/.env, STACK=기본 HubStack)"
+run = '''
+set -euo pipefail
+env_file="${ENV_FILE:-$HOME/capstone/.env}"
+stack="${STACK:-HubStack}"
+
+[ -f "$env_file" ] || { echo "env 파일 없음: $env_file" >&2; exit 1; }
+
+# KEY= 이후 전체를 값으로 (값 안의 = 보존), CR/LF·감싼 따옴표 제거
+value="$(sed -n 's/^[[:space:]]*AWS_BEARER_TOKEN_BEDROCK[[:space:]]*=[[:space:]]*//p' "$env_file" | head -n1 | tr -d '\r\n')"
+case "$value" in
+  \"*\") value="${value#\"}"; value="${value%\"}" ;;
+  \'*\') value="${value#\'}"; value="${value%\'}" ;;
+esac
+[ -n "$value" ] || { echo "AWS_BEARER_TOKEN_BEDROCK 항목을 찾지 못함: $env_file" >&2; exit 1; }
+
+arn="$(aws cloudformation describe-stacks --stack-name "$stack" \
+    --query "Stacks[0].Outputs[?OutputKey=='BedrockTokenSecretArn'].OutputValue" \
+    --output text)"
+[ -n "$arn" ] && [ "$arn" != "None" ] || { echo "$stack 에 BedrockTokenSecretArn 출력이 없음 — 먼저 mise run infra:deploy" >&2; exit 1; }
+
+# 값은 argv(ps에서 보임)로 넘기지 않고 0600 임시파일로만 전달
+tmp="$(mktemp)"
+chmod 600 "$tmp"
+trap 'rm -f "$tmp"' EXIT
+printf '%s' "$value" > "$tmp"
+
+aws secretsmanager put-secret-value --secret-id "$arn" \
+    --secret-string "file://$tmp" --query VersionId --output text > /dev/null
+echo "등록 완료: $arn ($(wc -c < "$tmp")바이트 — 값은 출력하지 않음)"
+echo "실행 중인 태스크에 반영: aws ecs update-service --cluster <cluster> --service <service> --force-new-deployment"
+'''

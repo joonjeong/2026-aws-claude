@@ -4,10 +4,12 @@ newsroom/infra; architecture unchanged).
 CloudFront → (CloudFront origin-facing prefix-list SG + X-Origin-Verify) ALB
 → Fargate (public subnets only, desired_count=1), secrets injected at start.
 The container now serves the hub image (built from the repo root:
-`docker build -f hub/Dockerfile .`). Scope: `cdk synth` clean pass — no deploy.
+`docker build -f hub/Dockerfile .`). 이미지 빌드 플랫폼과 Fargate 런타임
+플랫폼은 `-c arch=arm64|amd64` 한 노브로 함께 정해진다(기본 arm64).
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import aws_cdk as cdk
@@ -27,12 +29,52 @@ from constructs import Construct
 CONTAINER_PORT = 8000
 REPO_ROOT = Path(__file__).resolve().parents[2]  # claude-lab/ (hub/Dockerfile의 빌드 컨텍스트)
 
-# The AWS-managed "com.amazonaws.global.cloudfront.origin-facing" prefix list
-# id is region-specific and normally resolved with a context lookup (needs an
-# AWS account). To keep `cdk synth` credential-free, pass it via context:
-#   cdk synth -c cloudfront_prefix_list_id=pl-xxxxxxxx
-# The default below is the well-known id in ap-northeast-2.
-DEFAULT_CLOUDFRONT_PREFIX_LIST_ID = "pl-22a6434a"
+CLOUDFRONT_PREFIX_LIST_NAME = "com.amazonaws.global.cloudfront.origin-facing"
+
+
+def lookup_cloudfront_prefix_list_id() -> str:
+    """배포 대상 리전의 CloudFront origin-facing 관리형 prefix list id를 조회.
+
+    이 id는 리전마다 다르고 AWS가 값 자체를 문서로 고정 보장하지 않는다.
+    하드코딩하면 틀린 값으로도 synth·diff는 통과하고, 배포 6분 뒤
+    SecurityGroupIngress에서 "The prefix list ID '...' does not exist"로
+    롤백된다 — 그래서 이름으로 조회한다(ec2:DescribeManagedPrefixLists 필요).
+
+    자격증명 없는 경로(infra:synth)는 `-c cloudfront_prefix_list_id=pl-...`로
+    조회를 건너뛴다.
+    """
+    # 리전 해석: CDK CLI가 앱 실행 시 넣어 주는 CDK_DEFAULT_REGION이 실제 배포
+    # 대상과 일치한다(스택이 env-agnostic이라 self.region은 토큰).
+    region = os.environ.get("CDK_DEFAULT_REGION") or os.environ.get("AWS_REGION")
+    try:
+        import boto3
+    except ModuleNotFoundError as exc:  # pragma: no cover - 의존성 누락 안내
+        raise RuntimeError(
+            "boto3가 필요하다 (prefix list 조회) — `uv sync --directory hub/infra` "
+            "또는 `-c cloudfront_prefix_list_id=pl-...`로 직접 지정"
+        ) from exc
+
+    try:
+        response = boto3.client("ec2", region_name=region).describe_managed_prefix_lists(
+            Filters=[
+                {"Name": "prefix-list-name", "Values": [CLOUDFRONT_PREFIX_LIST_NAME]}
+            ]
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"{CLOUDFRONT_PREFIX_LIST_NAME} 조회 실패 (region={region}): {exc}\n"
+            "자격증명·ec2:DescribeManagedPrefixLists 권한을 확인하거나 "
+            "`-c cloudfront_prefix_list_id=pl-...`로 직접 지정"
+        ) from exc
+
+    found = response.get("PrefixLists", [])
+    if len(found) != 1:
+        raise RuntimeError(
+            f"{CLOUDFRONT_PREFIX_LIST_NAME} 조회 결과가 1건이 아니다 "
+            f"(region={region}, {len(found)}건) — "
+            "`-c cloudfront_prefix_list_id=pl-...`로 직접 지정"
+        )
+    return found[0]["PrefixListId"]
 
 
 class HubStack(Stack):
@@ -41,8 +83,22 @@ class HubStack(Stack):
 
         prefix_list_id = (
             self.node.try_get_context("cloudfront_prefix_list_id")
-            or DEFAULT_CLOUDFRONT_PREFIX_LIST_ID
+            or lookup_cloudfront_prefix_list_id()
         )
+        # CPU 아키텍처 — 이미지 빌드 플랫폼과 Fargate 런타임 플랫폼을 한 노브로
+        # 묶어 둔다(둘이 어긋나면 태스크가 exec format error로 죽는다).
+        # 기본 arm64: 빌드 호스트가 Graviton이라 에뮬레이션 없이 네이티브 빌드되고
+        # Fargate ARM 요금도 더 싸다. x86 호스트/이미지면 `-c arch=amd64`.
+        # 주의: 크로스 아키텍처 빌드는 호스트에 qemu binfmt 등록이 필요하다
+        # (미등록 시 Dockerfile의 첫 RUN에서 `exec /bin/sh: exec format error`).
+        arch = (self.node.try_get_context("arch") or "arm64").strip().lower()
+        if arch not in ("arm64", "amd64"):
+            raise ValueError(f"-c arch must be 'arm64' or 'amd64', got {arch!r}")
+        build_platform, cpu_architecture = {
+            "arm64": (ecr_assets.Platform.LINUX_ARM64, ecs.CpuArchitecture.ARM64),
+            "amd64": (ecr_assets.Platform.LINUX_AMD64, ecs.CpuArchitecture.X86_64),
+        }[arch]
+
         # Container image — 두 모드:
         #  (기본) DockerImageAsset: cdk deploy가 리포 루트 컨텍스트에서
         #    hub/Dockerfile을 직접 빌드해 CDK 부트스트랩 자산 ECR로 push.
@@ -67,8 +123,8 @@ class HubStack(Stack):
                 directory=str(REPO_ROOT),
                 file="hub/Dockerfile",
                 build_args={"APPS": ",".join(parts)},
-                # Fargate 기본 아키텍처는 amd64 — Apple Silicon 로컬 빌드 대비 명시
-                platform=ecr_assets.Platform.LINUX_AMD64,
+                # 아래 TaskDef의 runtime_platform과 동일한 arch로 빌드
+                platform=build_platform,
             )
 
         # --- VPC: 2 AZ, public subnets only (no NAT) ---
@@ -96,8 +152,12 @@ class HubStack(Stack):
                 exclude_punctuation=True, password_length=48
             ),
         )
-        # Bedrock bearer token: the secret VALUE is registered manually before
-        # deploy (never in CDK code); injected into the container via ECS secrets.
+        # Bedrock bearer token: CDK creates the secret with a throwaway generated
+        # value (never the real one — it would land in the template/state). Register
+        # the real value AFTER deploy, then force a new deployment to pick it up:
+        #   mise run infra:secret   (reads ~/capstone/.env, put-secret-value)
+        #   aws ecs update-service --cluster <c> --service <s> --force-new-deployment
+        # Injected into the container via ECS secrets (ARN reference, not plaintext).
         bedrock_token_secret = secretsmanager.Secret(
             self,
             "BedrockBearerToken",
@@ -134,7 +194,14 @@ class HubStack(Stack):
         )
 
         task_def = ecs.FargateTaskDefinition(
-            self, "TaskDef", cpu=256, memory_limit_mib=512
+            self,
+            "TaskDef",
+            cpu=256,
+            memory_limit_mib=512,
+            runtime_platform=ecs.RuntimePlatform(
+                cpu_architecture=cpu_architecture,
+                operating_system_family=ecs.OperatingSystemFamily.LINUX,
+            ),
         )
         task_def.add_container(
             "web",

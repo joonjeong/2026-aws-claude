@@ -96,11 +96,24 @@ mise run infra:diff        # 배포 전 변경분 확인
 mise run infra:deploy      # 실배포 — CDK가 hub/Dockerfile을 직접 빌드해
                            #   부트스트랩 자산 ECR로 push까지 (로컬 docker 필요)
 APPS=quake,market mise run infra:deploy       # 프론트 번들 앱 선택 배포
+ARCH=amd64 mise run infra:deploy              # x86 호스트에서 빌드·배포 (기본 arm64)
 IMAGE_URI=<uri> mise run infra:deploy         # 사전 빌드 이미지 사용 (docker 불요)
 ```
 
-이미지는 Fargate 기본 아키텍처에 맞춰 linux/amd64로 빌드된다(Apple Silicon에서도
-교차 빌드). 배포 후 Secrets Manager의 `BedrockTokenSecretArn` 시크릿에 실제
+이미지 빌드 플랫폼과 Fargate 런타임 플랫폼은 `ARCH`(→ `-c arch`) 하나로 함께
+정해진다. 기본 `arm64` — Graviton 빌드 호스트에서 에뮬레이션 없이 네이티브로
+빌드되고 Fargate ARM 요금도 더 싸다. x86 호스트라면 `ARCH=amd64`. 호스트와 다른
+아키텍처로 빌드하려면 qemu binfmt 등록이 필요하고(`docker run --privileged
+tonistiigi/binfmt --install all`), 없으면 빌드 첫 `RUN`에서
+`exec /bin/sh: exec format error`로 실패한다.
+
+ALB 인바운드를 제한하는 CloudFront origin-facing 관리형 prefix list id는 리전마다
+달라서 synth 시 이름으로 조회한다(`ec2:DescribeManagedPrefixLists` 권한 필요).
+자격증명 없이 템플릿만 볼 때는 `-c cloudfront_prefix_list_id=pl-...`로 건너뛴다
+(`infra:synth`가 placeholder를 넘긴다). 틀린 id를 넣으면 synth·diff는 통과하고
+배포 중 `SecurityGroupIngress`에서 `does not exist`로 롤백된다.
+
+배포 후 Secrets Manager의 `BedrockTokenSecretArn` 시크릿에 실제
 Bearer 토큰을 수동 등록해야 LLM 기능이 활성화된다 (CDK 코드·이미지에 비밀 없음).
 
 설계 문서와 결정 이력은 [docs/README.md](docs/README.md)에서 시작.
