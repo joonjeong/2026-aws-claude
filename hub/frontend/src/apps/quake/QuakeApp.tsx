@@ -1,13 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./quake.css";
+import { PLATE_BOUNDARIES } from "./plates";
+import {
+  MAP_W as W,
+  MAP_H as H,
+  PRESETS,
+  findPreset,
+  inPreset,
+  presetViewBox,
+  presetZoomK,
+  type Preset,
+  type PresetId,
+} from "./presets";
 
 const API = "/api/quake";
-const W = 1000;
-const H = 500;
 
 /* ---------- API types ---------- */
 
 interface QuakeEvent {
+  id: string;
   mag: number;
   place: string;
   time: number; // epoch ms
@@ -19,6 +30,7 @@ interface QuakeEvent {
 interface QuakesResponse {
   events?: QuakeEvent[];
   stats?: { last_fetch?: number | null }; // epoch seconds
+  new_ids?: string[]; // 마지막 수집 사이클에 새로 들어온 이벤트 id
 }
 
 interface BriefResponse {
@@ -63,9 +75,14 @@ const CONTINENTS: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [
 const px = (lon: number): number => ((lon + 180) / 360) * W;
 const py = (lat: number): number => ((90 - lat) / 180) * H;
 
-const CONTINENT_POINTS: string[] = CONTINENTS.map((line) =>
-  line.map(([lon, lat]) => `${px(lon).toFixed(1)},${py(lat).toFixed(1)}`).join(" "),
-);
+const toPoints = (line: ReadonlyArray<readonly [number, number]>): string =>
+  line.map(([lon, lat]) => `${px(lon).toFixed(1)},${py(lat).toFixed(1)}`).join(" ");
+
+const CONTINENT_POINTS: string[] = CONTINENTS.map(toPoints);
+const PLATE_POINTS: Array<{ name: string; points: string }> = PLATE_BOUNDARIES.map((b) => ({
+  name: b.name,
+  points: toPoints(b.points),
+}));
 
 /* ---------- depth color: lerp #ff8c42 (0km) -> #7c3aed (300km+) ---------- */
 function depthColor(depthKm: number): string {
@@ -109,7 +126,57 @@ function topRegion(events: QuakeEvent[]): string | null {
   return best;
 }
 
+function storageGet(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* private mode 등 — 저장 실패는 무시 */
+  }
+}
+
 /* ---------- sub-components ---------- */
+
+function Toolbar(props: {
+  preset: Preset;
+  onPreset: (id: PresetId) => void;
+  showPlates: boolean;
+  onTogglePlates: () => void;
+  hasLoaded: boolean;
+  newCount: number;
+}) {
+  const { preset, onPreset, showPlates, onTogglePlates, hasLoaded, newCount } = props;
+  return (
+    <div className="card toolbar">
+      <div className="presets" role="group" aria-label="지역 프리셋">
+        {PRESETS.map((p) => (
+          <button
+            key={p.id}
+            className={p.id === preset.id ? "on" : undefined}
+            aria-pressed={p.id === preset.id}
+            onClick={() => onPreset(p.id)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <span className="sep" />
+      <button className={showPlates ? "on" : undefined} aria-pressed={showPlates} onClick={onTogglePlates}>
+        판 경계
+      </button>
+      <span className="newcount">
+        이번 사이클 신규 <b>{hasLoaded ? newCount : "–"}</b>건
+      </span>
+    </div>
+  );
+}
 
 function StatsBar(props: {
   hasLoaded: boolean;
@@ -147,13 +214,21 @@ function StatsBar(props: {
   );
 }
 
-function WorldMap({ events, now }: { events: QuakeEvent[]; now: number }) {
+function WorldMap(props: {
+  events: QuakeEvent[];
+  now: number;
+  preset: Preset;
+  showPlates: boolean;
+  newIds: ReadonlySet<string>;
+}) {
+  const { events, now, preset, showPlates, newIds } = props;
+  const zoomK = presetZoomK(preset); // 줌해도 화면상 원 크기 유지
   return (
     <div className="card">
       <div className="map-box">
         <svg
           className="worldmap"
-          viewBox={`0 0 ${W} ${H}`}
+          viewBox={presetViewBox(preset)}
           xmlns="http://www.w3.org/2000/svg"
           role="img"
           aria-label="세계 지진 지도"
@@ -163,20 +238,34 @@ function WorldMap({ events, now }: { events: QuakeEvent[]; now: number }) {
               <polyline key={i} className="continent" points={points} />
             ))}
           </g>
+          {showPlates && (
+            <g>
+              {PLATE_POINTS.map((b) => (
+                <polyline key={b.name} className="plate" points={b.points}>
+                  <title>{b.name}</title>
+                </polyline>
+              ))}
+            </g>
+          )}
           <g>
-            {[...events].reverse().map((e, i) => {
+            {[...events].reverse().map((e) => {
               // draw newest last (on top)
               const cx = px(e.lon).toFixed(1);
               const cy = py(e.lat).toFixed(1);
-              const r = Math.max(1.5, e.mag * 2.2); // radius = mag * 2.2px
-              const key = `${e.time}-${e.lat}-${e.lon}-${i}`;
+              const r = Math.max(1.5, e.mag * 2.2) * zoomK; // radius = mag * 2.2px (줌 보정)
               return (
-                <g key={key}>
+                <g key={e.id}>
                   {now - e.time < 3600_000 && (
                     // pulse ring for < 1h old
                     <circle className="pulse" cx={cx} cy={cy} r={r} />
                   )}
-                  <circle className="epi" cx={cx} cy={cy} r={r} fill={depthColor(e.depth_km)}>
+                  <circle
+                    className={newIds.has(e.id) ? "epi newhl" : "epi"}
+                    cx={cx}
+                    cy={cy}
+                    r={r}
+                    fill={depthColor(e.depth_km)}
+                  >
                     <title>{`M${e.mag} ${e.place} · 깊이 ${e.depth_km}km · ${fmtKST(e.time)}`}</title>
                   </circle>
                 </g>
@@ -190,7 +279,79 @@ function WorldMap({ events, now }: { events: QuakeEvent[]; now: number }) {
         <span>0km</span>
         <span className="bar" />
         <span>300km+</span>
-        <span className="note">원 크기 = 규모 · 링 = 최근 1시간</span>
+        <span className="note">원 크기 = 규모 · 링 = 최근 1시간{showPlates ? " · 점선 = 판 경계" : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- 깊이 단면: x = 경도(프리셋 범위), y = 깊이 로그 스케일 ---------- */
+
+const SEC_W = 1000;
+const SEC_H = 260;
+const SEC_TOP = 12;
+const SEC_BOTTOM = 28;
+const SEC_LEFT = 52;
+const SEC_RIGHT = 12;
+const SEC_PLOT_W = SEC_W - SEC_LEFT - SEC_RIGHT;
+const SEC_PLOT_H = SEC_H - SEC_TOP - SEC_BOTTOM;
+const DEPTH_MAX = 700;
+const DEPTH_TICKS = [0, 10, 70, 300, 700];
+
+/** 깊이 -> y (로그 스케일, [1,700]km로 클램프) */
+function depthY(depthKm: number): number {
+  const d = Math.max(1, Math.min(DEPTH_MAX, depthKm));
+  return SEC_TOP + (Math.log10(d) / Math.log10(DEPTH_MAX)) * SEC_PLOT_H;
+}
+
+function DepthSection({ events, preset }: { events: QuakeEvent[]; preset: Preset }) {
+  const [lonA, lonB] = preset.viewLon;
+  const lonX = (lon: number): number => SEC_LEFT + ((lon - lonA) / (lonB - lonA)) * SEC_PLOT_W;
+  return (
+    <div className="card">
+      <h2>깊이 단면 — 경도 × 깊이 (로그 스케일)</h2>
+      <div className="section-box">
+        <svg
+          className="depthsection"
+          viewBox={`0 0 ${SEC_W} ${SEC_H}`}
+          xmlns="http://www.w3.org/2000/svg"
+          role="img"
+          aria-label="경도-깊이 단면도"
+        >
+          <rect className="section-frame" x={SEC_LEFT} y={SEC_TOP} width={SEC_PLOT_W} height={SEC_PLOT_H} />
+          {DEPTH_TICKS.map((d) => {
+            const y = depthY(Math.max(1, d));
+            return (
+              <g key={d}>
+                <line className="gridline" x1={SEC_LEFT} x2={SEC_LEFT + SEC_PLOT_W} y1={y} y2={y} />
+                <text className="axis" x={SEC_LEFT - 7} y={y + 4} textAnchor="end">
+                  {d === DEPTH_MAX ? `${d} km` : String(d)}
+                </text>
+              </g>
+            );
+          })}
+          <text className="axis" x={SEC_LEFT} y={SEC_H - 8} textAnchor="start">{`${lonA}°`}</text>
+          <text className="axis" x={SEC_LEFT + SEC_PLOT_W} y={SEC_H - 8} textAnchor="end">{`${lonB}°`}</text>
+          <g>
+            {[...events].reverse().map((e) => (
+              <circle
+                key={e.id}
+                className="epi"
+                cx={lonX(e.lon).toFixed(1)}
+                cy={depthY(e.depth_km).toFixed(1)}
+                r={Math.max(1.5, e.mag * 1.8)}
+                fill={depthColor(e.depth_km)}
+              >
+                <title>{`M${e.mag} ${e.place} · 깊이 ${e.depth_km}km`}</title>
+              </circle>
+            ))}
+          </g>
+        </svg>
+      </div>
+      <div className="legend">
+        <span className="note">
+          가로 = 경도 · 세로 = 깊이(로그) — 해구에서 대륙 쪽으로 갈수록 깊어지는 섭입대 경사가 드러납니다
+        </span>
       </div>
     </div>
   );
@@ -270,7 +431,12 @@ function BriefCard() {
   );
 }
 
-function EventTable({ hasLoaded, events }: { hasLoaded: boolean; events: QuakeEvent[] }) {
+function EventTable(props: {
+  hasLoaded: boolean;
+  events: QuakeEvent[];
+  newIds: ReadonlySet<string>;
+}) {
+  const { hasLoaded, events, newIds } = props;
   return (
     <div className="card">
       <h2>최근 이벤트</h2>
@@ -298,18 +464,24 @@ function EventTable({ hasLoaded, events }: { hasLoaded: boolean; events: QuakeEv
                 </td>
               </tr>
             ) : (
-              events.slice(0, 100).map((e, i) => (
-                <tr key={`${e.time}-${e.lat}-${e.lon}-${i}`}>
-                  <td className="num">{fmtKST(e.time)}</td>
-                  <td className="num">
-                    <span className="magchip" style={{ background: depthColor(e.depth_km) }}>
-                      M {e.mag.toFixed(1)}
-                    </span>
-                  </td>
-                  <td className="place">{e.place}</td>
-                  <td className="num">{e.depth_km.toFixed(1)} km</td>
-                </tr>
-              ))
+              events.slice(0, 100).map((e) => {
+                const isNew = newIds.has(e.id);
+                return (
+                  <tr key={e.id} className={isNew ? "rownew" : undefined}>
+                    <td className="num">{fmtKST(e.time)}</td>
+                    <td className="num">
+                      <span className="magchip" style={{ background: depthColor(e.depth_km) }}>
+                        M {e.mag.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="place">
+                      {isNew && <span className="newbadge">NEW</span>}
+                      {e.place}
+                    </td>
+                    <td className="num">{e.depth_km.toFixed(1)} km</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -326,13 +498,27 @@ export default function QuakeApp() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [minMag, setMinMag] = useState(2.5);
+  const [presetId, setPresetId] = useState<PresetId>(() => findPreset(storageGet("quake-preset")).id);
+  const [showPlates, setShowPlates] = useState<boolean>(() => storageGet("quake-plates") === "1");
+  const [serverNewIds, setServerNewIds] = useState<string[]>([]);
+  // 직전 응답과의 diff로 얻은 "이번에 새로 나타난" id — 하이라이트/NEW 배지용
+  const [clientNewIds, setClientNewIds] = useState<ReadonlySet<string>>(() => new Set());
+  const prevIdsRef = useRef<Set<string> | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     try {
       const res = await fetch(`${API}/quakes?hours=24&min_mag=2.5`);
       if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as QuakesResponse;
-      setAllEvents(data.events ?? []);
+      const evts = data.events ?? [];
+      const prev = prevIdsRef.current;
+      if (prev) {
+        // 첫 로드는 비교 대상이 없으므로 하이라이트 없음
+        setClientNewIds(new Set(evts.filter((e) => !prev.has(e.id)).map((e) => e.id)));
+      }
+      prevIdsRef.current = new Set(evts.map((e) => e.id));
+      setAllEvents(evts);
+      setServerNewIds(data.new_ids ?? []);
       setLastFetch(data.stats?.last_fetch ?? null);
       setHasLoaded(true);
       setLoadFailed(false);
@@ -348,17 +534,43 @@ export default function QuakeApp() {
     return () => window.clearInterval(id);
   }, [load]);
 
-  // client-side filter — map, table and stats all derive from this
-  const events = useMemo(() => allEvents.filter((e) => e.mag >= minMag), [allEvents, minMag]);
+  const selectPreset = useCallback((id: PresetId): void => {
+    setPresetId(id);
+    storageSet("quake-preset", id);
+  }, []);
+
+  const togglePlates = useCallback((): void => {
+    setShowPlates((v) => {
+      storageSet("quake-plates", v ? "0" : "1");
+      return !v;
+    });
+  }, []);
+
+  const preset = findPreset(presetId);
+
+  // client-side filter (규모 + 프리셋 bbox) — map, section, table, stats all derive from this
+  const events = useMemo(
+    () => allEvents.filter((e) => e.mag >= minMag && inPreset(e.lon, e.lat, preset)),
+    [allEvents, minMag, preset],
+  );
   const now = Date.now();
 
   return (
     <div className="wrap">
+      <Toolbar
+        preset={preset}
+        onPreset={selectPreset}
+        showPlates={showPlates}
+        onTogglePlates={togglePlates}
+        hasLoaded={hasLoaded}
+        newCount={serverNewIds.length}
+      />
       <StatsBar hasLoaded={hasLoaded} loadFailed={loadFailed} events={events} lastFetch={lastFetch} />
-      <WorldMap events={events} now={now} />
+      <WorldMap events={events} now={now} preset={preset} showPlates={showPlates} newIds={clientNewIds} />
+      <DepthSection events={events} preset={preset} />
       <MagFilter minMag={minMag} onChange={setMinMag} />
       <BriefCard />
-      <EventTable hasLoaded={hasLoaded} events={events} />
+      <EventTable hasLoaded={hasLoaded} events={events} newIds={clientNewIds} />
     </div>
   );
 }

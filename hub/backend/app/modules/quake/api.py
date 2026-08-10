@@ -28,7 +28,8 @@ async def quakes(
     min_mag: float = Query(2.5, ge=0, le=10),
 ):
     events = store.query(hours=hours, min_mag=min_mag)
-    return {"events": events, "stats": store.stats(events)}
+    # new_ids: 마지막 수집 사이클에 새로 들어온 이벤트 id 목록 (store.ingest가 기록)
+    return {"events": events, "stats": store.stats(events), "new_ids": store.last_new_ids}
 
 
 @router.post("/brief")

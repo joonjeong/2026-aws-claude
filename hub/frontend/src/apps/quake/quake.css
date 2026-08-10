@@ -8,11 +8,13 @@
   --row-hover: #f0f2f5;
   --quake-shallow: #ff8c42; /* 깊이 0km */
   --quake-deep: #7c3aed;    /* 깊이 300km+ */
+  --plate: #c9504e;         /* 판 경계 점선 */
 }
 [data-theme="dark"] .app-quake {
   --map-bg: #0c1017;
   --land: #3d4757;
   --row-hover: #202736;
+  --plate: #e8837a;
 }
 
 .app-quake .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 20px 48px; }
@@ -35,9 +37,25 @@
 .app-quake .card h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
 
 .app-quake .map-box { overflow-x: auto; }
-.app-quake .worldmap { width: 100%; height: auto; display: block; background: var(--map-bg); border-radius: 8px; }
-.app-quake .continent { fill: none; stroke: var(--land); stroke-width: 1.4; stroke-linejoin: round; }
-.app-quake .epi { stroke: rgba(0, 0, 0, .25); stroke-width: .5; opacity: .85; }
+.app-quake .worldmap {
+  width: 100%; height: auto; max-height: 460px; display: block;
+  background: var(--map-bg); border-radius: 8px;
+}
+/* 줌(viewBox 축소) 시에도 선 굵기는 화면 픽셀 기준 유지 */
+.app-quake .continent {
+  fill: none; stroke: var(--land); stroke-width: 1.4; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.app-quake .plate {
+  fill: none; stroke: var(--plate); stroke-width: 1; stroke-dasharray: 5 4;
+  stroke-linejoin: round; opacity: .8; vector-effect: non-scaling-stroke;
+}
+.app-quake .epi { stroke: rgba(0, 0, 0, .25); stroke-width: .5; opacity: .85; vector-effect: non-scaling-stroke; }
+.app-quake .epi.newhl { animation: quake-newflash 3s ease-out 1; }
+@keyframes quake-newflash {
+  0%, 60% { stroke: #ffffff; stroke-width: 2.5; opacity: 1; }
+  100%    { stroke: rgba(0, 0, 0, .25); stroke-width: .5; opacity: .85; }
+}
 .app-quake .pulse {
   fill: none; stroke: var(--quake-shallow); stroke-width: 1.5;
   transform-box: fill-box; transform-origin: center;
@@ -50,6 +68,33 @@
 .app-quake .legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
 .app-quake .legend .bar { width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--quake-shallow), var(--quake-deep)); }
 .app-quake .legend .note { margin-left: 12px; }
+
+/* 툴바: 지역 프리셋 + 판 경계 토글 + 신규 카운터 */
+.app-quake .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; }
+.app-quake .toolbar .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.app-quake .toolbar .sep { width: 1px; height: 20px; background: var(--border); }
+.app-quake .wrap .toolbar button.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.app-quake .toolbar .newcount { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.app-quake .toolbar .newcount b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* 깊이 단면 */
+.app-quake .section-box { overflow-x: auto; }
+.app-quake .depthsection { width: 100%; height: auto; display: block; background: var(--map-bg); border-radius: 8px; }
+.app-quake .depthsection .section-frame { fill: none; stroke: var(--border); stroke-width: 1; }
+.app-quake .depthsection .gridline { stroke: var(--land); stroke-width: .5; stroke-dasharray: 3 4; opacity: .6; }
+.app-quake .depthsection .axis { fill: var(--muted); font-size: 12px; }
+
+/* 새 이벤트: 테이블 행 하이라이트 + NEW 배지 */
+.app-quake tr.rownew td { animation: quake-rowflash 3s ease-out 1; }
+@keyframes quake-rowflash {
+  0%, 60% { background-color: rgba(255, 140, 66, .22); }
+  100%    { background-color: transparent; }
+}
+.app-quake .newbadge {
+  display: inline-block; background: var(--accent); color: #fff;
+  font-size: 10.5px; font-weight: 700; border-radius: 5px;
+  padding: 1px 5px; margin-right: 6px; vertical-align: 1px;
+}
 
 .app-quake .filter { display: flex; align-items: center; gap: 12px; }
 .app-quake .filter .filter-label { font-size: 13px; color: var(--muted); }
