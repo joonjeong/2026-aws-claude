@@ -61,7 +61,10 @@ STORE_MAX_PER_SOURCE: int = 50    # IdempotentStore cap per source
 SUMMARY_MAX_CHARS: int = 300      # HTML-stripped summary truncation
 
 # Lens (Bedrock Converse via labkit)
-LENS_MAX_TOKENS: int = 1500
+# 랩 원문은 1500이었으나 보너스 A·C(5번째 매체 + tones)로 출력 계약이 커져
+# 실측 절단 발생(2026-08-10: 1500 토큰 ≈ 1906자 ≈ 클러스터 2.5개 분량).
+# 최대 5클러스터 × 5매체 프레임 + tones 기준 ~3000 토큰이 필요해 여유분 포함 4000.
+LENS_MAX_TOKENS: int = env_int("NEWSROOM_LENS_MAX_TOKENS", 4000)
 LENS_BUCKET_S: int = 600          # same 10-minute bucket → cached answer
 LENS_MODEL: str = env_str("NEWSROOM_LENS_MODEL", "global.anthropic.claude-sonnet-4-6")
 LENS_REGION: str = env_str("NEWSROOM_LENS_REGION", "ap-northeast-2")

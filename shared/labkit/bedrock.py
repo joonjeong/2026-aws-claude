@@ -36,7 +36,11 @@ async def converse(
     model: str = DEFAULT_MODEL,
     region: str = DEFAULT_REGION,
     timeout_s: float = 60.0,
+    require_complete: bool = False,
 ) -> str:
+    """require_complete: JSON-contract callers (e.g. newsroom lens) set True —
+    a maxTokens-truncated answer is useless there and must 502 instead of
+    propagating. Prose callers (trend/quake briefs) keep the lenient default."""
     token = os.environ.get(TOKEN_ENV)
     if not token:
         raise BedrockError(503, f"{TOKEN_ENV} is not set")
@@ -74,6 +78,16 @@ async def converse(
         raise BedrockError(502, "bedrock response parse failed") from exc
     if not text:
         raise BedrockError(502, "bedrock returned empty text")
+    stop_reason = data.get("stopReason")
+    if stop_reason not in (None, "end_turn", "stop_sequence"):
+        logger.warning(
+            "bedrock stopped early (stopReason=%s, max_tokens=%s); tail=%r",
+            stop_reason, max_tokens, text[-120:],
+        )
+        if require_complete:
+            raise BedrockError(
+                502, f"bedrock output incomplete (stopReason={stop_reason})"
+            )
     return text
 
 
@@ -96,3 +110,8 @@ class BucketCachedText:
         text = await converse(**converse_kwargs)
         self._cache[key] = (bucket, text)
         return text, False, bucket
+
+    def invalidate(self, key: str = "default") -> None:
+        """Drop a cached entry — for callers whose post-parse validation
+        failed, so the bad text doesn't get served for the rest of the bucket."""
+        self._cache.pop(key, None)

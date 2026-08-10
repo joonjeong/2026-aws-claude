@@ -117,8 +117,15 @@ class Lens:
             max_tokens=config.LENS_MAX_TOKENS,
             model=config.LENS_MODEL,
             region=config.LENS_REGION,
+            require_complete=True,  # 절단된 JSON은 502로 조기 실패
         )
-        data = parse_lens_json(text)
+        try:
+            data = parse_lens_json(text)
+        except LensParseError:
+            # 계약 위반 텍스트를 버킷 캐시에 남기면 10분 내내 같은 502가
+            # 반복된다(2026-08-10 장애). 버려서 다음 요청이 재생성하게 한다.
+            self._cache.invalidate("lens")
+            raise
         return {
             "clusters": data.get("clusters", []),
             "overview": data.get("overview", ""),
