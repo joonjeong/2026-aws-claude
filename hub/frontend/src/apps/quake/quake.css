@@ -121,6 +121,30 @@
   padding: 1px 6px; color: #fff; font-weight: 700; font-size: 12.5px;
 }
 
+/* 보너스 차트 행: 시간 히스토그램 + 구텐베르크-리히터 (좁은 화면에서는 세로 스택) */
+.app-quake .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.app-quake .charts-row .card { margin-bottom: 0; }
+.app-quake .chart-box { overflow-x: auto; }
+.app-quake .qchart { width: 100%; height: auto; display: block; background: var(--map-bg); border-radius: 8px; }
+.app-quake .qchart .axis { fill: var(--muted); font-size: 11px; }
+.app-quake .qchart .gridline { stroke: var(--land); stroke-width: .5; stroke-dasharray: 3 4; opacity: .6; }
+.app-quake .qchart .baseline { stroke: var(--border); stroke-width: 1; }
+.app-quake .qchart .bar { fill: var(--accent); opacity: .75; }
+.app-quake .qchart .bar:hover { opacity: 1; }
+.app-quake .qchart .grpoint { fill: var(--accent); stroke: rgba(0, 0, 0, .25); stroke-width: .5; }
+.app-quake .qchart .grfit { stroke: var(--quake-shallow); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.app-quake .qchart .grb { fill: var(--text); font-size: 14px; font-weight: 700; }
+.app-quake .chart-notice { color: var(--muted); font-size: 13px; line-height: 1.6; padding: 18px 4px; }
+
+/* USGS 링크: 테이블 지역 셀 + 지도 진앙 앵커 */
+.app-quake td.place a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+.app-quake td.place a:hover { color: var(--accent); text-decoration-style: solid; }
+.app-quake .worldmap a { cursor: pointer; }
+.app-quake .worldmap a:hover .epi { opacity: 1; stroke: var(--text); stroke-width: 1.2; }
+
 @media (max-width: 720px) {
   .app-quake .stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 860px) {
+  .app-quake .charts-row { grid-template-columns: 1fr; }
 }

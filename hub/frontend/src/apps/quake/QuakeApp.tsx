@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./quake.css";
+import { GRChart, HourHistogram } from "./charts";
 import { PLATE_BOUNDARIES } from "./plates";
 import {
   MAP_W as W,
@@ -14,6 +15,15 @@ import {
 } from "./presets";
 
 const API = "/api/quake";
+
+/* 시간 창 (시간 단위) — localStorage `quake-hours`에 유지 */
+type HoursWindow = 6 | 24;
+const DEFAULT_HOURS: HoursWindow = 24;
+const HOURS_OPTIONS: ReadonlyArray<HoursWindow> = [6, 24];
+
+/** USGS 이벤트 상세 페이지 */
+const usgsUrl = (id: string): string =>
+  `https://earthquake.usgs.gov/earthquakes/eventpage/${encodeURIComponent(id)}`;
 
 /* ---------- API types ---------- */
 
@@ -147,12 +157,14 @@ function storageSet(key: string, value: string): void {
 function Toolbar(props: {
   preset: Preset;
   onPreset: (id: PresetId) => void;
+  hours: HoursWindow;
+  onHours: (h: HoursWindow) => void;
   showPlates: boolean;
   onTogglePlates: () => void;
   hasLoaded: boolean;
   newCount: number;
 }) {
-  const { preset, onPreset, showPlates, onTogglePlates, hasLoaded, newCount } = props;
+  const { preset, onPreset, hours, onHours, showPlates, onTogglePlates, hasLoaded, newCount } = props;
   return (
     <div className="card toolbar">
       <div className="presets" role="group" aria-label="지역 프리셋">
@@ -164,6 +176,19 @@ function Toolbar(props: {
             onClick={() => onPreset(p.id)}
           >
             {p.label}
+          </button>
+        ))}
+      </div>
+      <span className="sep" />
+      <div className="presets" role="group" aria-label="시간 창">
+        {HOURS_OPTIONS.map((h) => (
+          <button
+            key={h}
+            className={h === hours ? "on" : undefined}
+            aria-pressed={h === hours}
+            onClick={() => onHours(h)}
+          >
+            {h}시간
           </button>
         ))}
       </div>
@@ -183,8 +208,9 @@ function StatsBar(props: {
   loadFailed: boolean;
   events: QuakeEvent[];
   lastFetch: number | null;
+  hours: HoursWindow;
 }) {
-  const { hasLoaded, loadFailed, events, lastFetch } = props;
+  const { hasLoaded, loadFailed, events, lastFetch, hours } = props;
   const count = hasLoaded ? String(events.length) : "–";
   const max =
     hasLoaded && events.length
@@ -195,7 +221,7 @@ function StatsBar(props: {
   return (
     <div className="stats">
       <div className="stat">
-        <div className="label">24시간 건수</div>
+        <div className="label">{hours}시간 건수</div>
         <div className="value">{count}</div>
       </div>
       <div className="stat">
@@ -259,15 +285,18 @@ function WorldMap(props: {
                     // pulse ring for < 1h old
                     <circle className="pulse" cx={cx} cy={cy} r={r} />
                   )}
-                  <circle
-                    className={newIds.has(e.id) ? "epi newhl" : "epi"}
-                    cx={cx}
-                    cy={cy}
-                    r={r}
-                    fill={depthColor(e.depth_km)}
-                  >
-                    <title>{`M${e.mag} ${e.place} · 깊이 ${e.depth_km}km · ${fmtKST(e.time)}`}</title>
-                  </circle>
+                  {/* SVG 앵커 — 진앙 클릭 시 USGS 이벤트 페이지 (새 탭) */}
+                  <a href={usgsUrl(e.id)} target="_blank" rel="noopener noreferrer">
+                    <circle
+                      className={newIds.has(e.id) ? "epi newhl" : "epi"}
+                      cx={cx}
+                      cy={cy}
+                      r={r}
+                      fill={depthColor(e.depth_km)}
+                    >
+                      <title>{`M${e.mag} ${e.place} · 깊이 ${e.depth_km}km · ${fmtKST(e.time)} — 클릭하면 USGS 상세`}</title>
+                    </circle>
+                  </a>
                 </g>
               );
             })}
@@ -476,7 +505,14 @@ function EventTable(props: {
                     </td>
                     <td className="place">
                       {isNew && <span className="newbadge">NEW</span>}
-                      {e.place}
+                      <a
+                        href={usgsUrl(e.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="USGS 이벤트 페이지 (새 탭)"
+                      >
+                        {e.place}
+                      </a>
                     </td>
                     <td className="num">{e.depth_km.toFixed(1)} km</td>
                   </tr>
@@ -498,6 +534,9 @@ export default function QuakeApp() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [minMag, setMinMag] = useState(2.5);
+  const [hours, setHours] = useState<HoursWindow>(() =>
+    storageGet("quake-hours") === "6" ? 6 : DEFAULT_HOURS,
+  );
   const [presetId, setPresetId] = useState<PresetId>(() => findPreset(storageGet("quake-preset")).id);
   const [showPlates, setShowPlates] = useState<boolean>(() => storageGet("quake-plates") === "1");
   const [serverNewIds, setServerNewIds] = useState<string[]>([]);
@@ -507,7 +546,7 @@ export default function QuakeApp() {
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const res = await fetch(`${API}/quakes?hours=24&min_mag=2.5`);
+      const res = await fetch(`${API}/quakes?hours=${hours}&min_mag=2.5`);
       if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as QuakesResponse;
       const evts = data.events ?? [];
@@ -525,14 +564,25 @@ export default function QuakeApp() {
     } catch {
       setLoadFailed(true);
     }
-  }, []);
+  }, [hours]);
 
-  // fetch now + every 60s
+  // fetch now + every 60s — hours가 바뀌면 load 정체성이 바뀌어 즉시 재요청 + 인터벌 재설정
   useEffect(() => {
     void load();
     const id = window.setInterval(() => void load(), 60_000);
     return () => window.clearInterval(id);
   }, [load]);
+
+  const selectHours = useCallback((h: HoursWindow): void => {
+    setHours((prev) => {
+      if (h === prev) return prev;
+      // 창 전환으로 "나타난" 이벤트는 신규가 아니므로 diff 기준을 초기화한다
+      prevIdsRef.current = null;
+      setClientNewIds(new Set());
+      storageSet("quake-hours", String(h));
+      return h;
+    });
+  }, []);
 
   const selectPreset = useCallback((id: PresetId): void => {
     setPresetId(id);
@@ -560,15 +610,33 @@ export default function QuakeApp() {
       <Toolbar
         preset={preset}
         onPreset={selectPreset}
+        hours={hours}
+        onHours={selectHours}
         showPlates={showPlates}
         onTogglePlates={togglePlates}
         hasLoaded={hasLoaded}
         newCount={serverNewIds.length}
       />
-      <StatsBar hasLoaded={hasLoaded} loadFailed={loadFailed} events={events} lastFetch={lastFetch} />
+      <StatsBar
+        hasLoaded={hasLoaded}
+        loadFailed={loadFailed}
+        events={events}
+        lastFetch={lastFetch}
+        hours={hours}
+      />
       <WorldMap events={events} now={now} preset={preset} showPlates={showPlates} newIds={clientNewIds} />
       <DepthSection events={events} preset={preset} />
       <MagFilter minMag={minMag} onChange={setMinMag} />
+      <div className="charts-row">
+        <div className="card">
+          <h2>시간별 발생 빈도 — 최근 {hours}시간 (KST)</h2>
+          <HourHistogram events={events} hours={hours} now={now} />
+        </div>
+        <div className="card">
+          <h2>규모-빈도 분포 — 구텐베르크-리히터</h2>
+          <GRChart events={events} minMag={minMag} />
+        </div>
+      </div>
       <BriefCard />
       <EventTable hasLoaded={hasLoaded} events={events} newIds={clientNewIds} />
     </div>
