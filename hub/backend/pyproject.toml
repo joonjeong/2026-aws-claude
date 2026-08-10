@@ -1,0 +1,22 @@
+[project]
+name = "hub-backend"
+version = "0.1.0"
+description = "claude-lab hub — unified capstone service"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "feedparser",
+    "yfinance",
+    "pykrx",
+    "boto3",
+    "labkit",
+]
+
+[tool.uv]
+# 앱 자체는 설치 대상 패키지가 아니라 의존성 집합 (virtual project)
+package = false
+
+[tool.uv.sources]
+labkit = { path = "../../shared", editable = true }

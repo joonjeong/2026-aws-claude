@@ -18,12 +18,11 @@
 
 ## 실행
 
+mise 통합 태스크 사용 — 상세는 [루트 README](../README.md).
+
 ```bash
-cd hub/backend
-.venv/bin/uvicorn app.main:app --port 8000    # ⚠ 이 머신은 omlx-server가 :8000 점유 — 다른 포트 사용
-# ENABLED_MODULES=quake,news  → 해당 모듈만 탑재 (기본 전체)
-# YT_FIXTURE=../fixtures/trending.json → trend 픽스처 모드 (YT_API_KEY 없이 데모)
-# AWS_BEARER_TOKEN_BEDROCK 설정 시 4개 모듈 LLM 기능 활성
+mise run setup && mise run start   # uv(백엔드) + pnpm(프론트), :8000 통합 서빙
+# ⚠ 이 머신은 omlx-server가 :8000 점유 — PORT=8010 mise run start
 ```
 
 - 프론트엔드는 **단일 Vite+React 앱** (`hub/frontend/`, 설계:

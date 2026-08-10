@@ -1,0 +1,49 @@
+# claude-lab hub — 통합 실행 진입점
+#   mise run setup   의존성 설치 (uv sync + pnpm install)
+#   mise run build   프론트 빌드 (VITE_APPS로 앱 선택)
+#   mise run start   통합 실행: 프론트 빌드 → 백엔드 서빙 (PORT 기본 8000)
+#   mise run dev     프론트 Vite dev 서버 (백엔드는 별도 backend:serve)
+
+[tools]
+node = "24"
+pnpm = "latest"
+uv = "latest"
+
+[tasks.setup]
+description = "의존성 설치 — backend(uv sync) + frontend(pnpm install)"
+run = [
+    "uv sync --directory hub/backend",
+    "pnpm --dir hub/frontend install",
+]
+
+[tasks."backend:serve"]
+description = "백엔드 서빙 (env: PORT=8000, ENABLED_MODULES, YT_FIXTURE, AWS_BEARER_TOKEN_BEDROCK, YT_API_KEY)"
+dir = "hub/backend"
+run = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+
+[tasks."frontend:build"]
+description = "프론트 빌드 → hub/backend/static/app (env: VITE_APPS=quake,news,trend,market)"
+dir = "hub/frontend"
+run = "pnpm build"
+
+[tasks."frontend:dev"]
+description = "프론트 Vite dev 서버 (env: VITE_API_TARGET, 기본 http://localhost:8000)"
+dir = "hub/frontend"
+run = "pnpm dev"
+
+[tasks.build]
+depends = ["frontend:build"]
+
+[tasks.start]
+description = "통합 실행 — 프론트 빌드 후 백엔드가 :PORT 하나로 전체 서빙"
+depends = ["frontend:build"]
+dir = "hub/backend"
+run = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
+
+[tasks.dev]
+depends = ["frontend:dev"]
+
+[tasks."infra:synth"]
+description = "CDK 스택 synth 검증 (hub/infra 자체 venv 사용)"
+dir = "hub/infra"
+run = "npx -y aws-cdk@2 synth --quiet"
