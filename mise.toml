@@ -46,9 +46,9 @@ run = "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
 depends = ["frontend:dev"]
 
 [tasks."infra:synth"]
-description = "CDK 스택 synth 검증 (hub/infra 자체 venv 사용)"
+description = "CDK 템플릿 검증 — docker 불요 경로(placeholder 이미지)로 빠르게"
 dir = "hub/infra"
-run = "cdk synth --quiet"
+run = "cdk synth --quiet -c image_uri=public.ecr.aws/docker/library/python:3.11-slim"
 
 [tasks."infra:bootstrap"]
 description = "CDK 부트스트랩 (계정/리전 최초 1회, AWS 자격증명 필요)"
@@ -61,6 +61,6 @@ dir = "hub/infra"
 run = 'cdk diff ${IMAGE_URI:+-c image_uri=$IMAGE_URI}'
 
 [tasks."infra:deploy"]
-description = "CloudFront→ALB→Fargate 실배포 (env: IMAGE_URI=ECR 이미지 URI 필수)"
+description = "실배포 — 기본은 CDK가 Dockerfile 빌드→자산 ECR push→Fargate까지 (docker 필요). env: IMAGE_URI=사전 빌드 이미지(선택), APPS=프론트 번들 앱 선택"
 dir = "hub/infra"
-run = 'cdk deploy -c image_uri=${IMAGE_URI:?"IMAGE_URI를 지정하세요 — 예: docker build -f hub/Dockerfile -t <ecr>/claude-lab-hub . && docker push 후 그 URI"}'
+run = 'cdk deploy ${IMAGE_URI:+-c image_uri=$IMAGE_URI} ${APPS:+-c apps=$APPS}'

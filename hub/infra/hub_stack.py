@@ -8,12 +8,15 @@ The container now serves the hub image (built from the repo root:
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import aws_cdk as cdk
 from aws_cdk import (
     Stack,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
     aws_ec2 as ec2,
+    aws_ecr_assets as ecr_assets,
     aws_ecs as ecs,
     aws_elasticloadbalancingv2 as elbv2,
     aws_logs as logs,
@@ -22,6 +25,7 @@ from aws_cdk import (
 from constructs import Construct
 
 CONTAINER_PORT = 8000
+REPO_ROOT = Path(__file__).resolve().parents[2]  # claude-lab/ (hub/Dockerfile의 빌드 컨텍스트)
 
 # The AWS-managed "com.amazonaws.global.cloudfront.origin-facing" prefix list
 # id is region-specific and normally resolved with a context lookup (needs an
@@ -39,16 +43,27 @@ class HubStack(Stack):
             self.node.try_get_context("cloudfront_prefix_list_id")
             or DEFAULT_CLOUDFRONT_PREFIX_LIST_ID
         )
-        # Container image URI: the hub image, built separately from the repo
-        # root (`docker build -f hub/Dockerfile -t claude-lab-hub .` — the
-        # multi-stage build in hub/Dockerfile: node builds the market frontend,
-        # python:3.11-slim serves all modules), pushed to a registry, and
-        # passed via `-c image_uri=...`. from_asset would require Docker at
-        # synth time, which the synth-only scope avoids.
-        image_uri = (
-            self.node.try_get_context("image_uri")
-            or "public.ecr.aws/docker/library/python:3.11-slim"
-        )
+        # Container image — 두 모드:
+        #  (기본) DockerImageAsset: cdk deploy가 리포 루트 컨텍스트에서
+        #    hub/Dockerfile을 직접 빌드해 CDK 부트스트랩 자산 ECR로 push.
+        #    별도 레지스트리·수동 push 불필요. Docker 데몬 필요.
+        #    `-c apps=quake,market`로 프론트 번들 앱 선택(빌드 아그 APPS).
+        #  (옵션) `-c image_uri=...`: 미리 빌드해 둔 이미지 사용 —
+        #    docker 없는 환경의 synth 검증(infra:synth)도 이 경로를 쓴다.
+        image_uri = self.node.try_get_context("image_uri")
+        if image_uri:
+            container_image = ecs.ContainerImage.from_registry(image_uri)
+        else:
+            container_image = ecs.ContainerImage.from_asset(
+                directory=str(REPO_ROOT),
+                file="hub/Dockerfile",
+                build_args={
+                    "APPS": self.node.try_get_context("apps")
+                    or "quake,news,trend,market"
+                },
+                # Fargate 기본 아키텍처는 amd64 — Apple Silicon 로컬 빌드 대비 명시
+                platform=ecr_assets.Platform.LINUX_AMD64,
+            )
 
         # --- VPC: 2 AZ, public subnets only (no NAT) ---
         vpc = ec2.Vpc(
@@ -117,7 +132,7 @@ class HubStack(Stack):
         )
         task_def.add_container(
             "web",
-            image=ecs.ContainerImage.from_registry(image_uri),
+            image=container_image,
             port_mappings=[ecs.PortMapping(container_port=CONTAINER_PORT)],
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="hub", log_retention=logs.RetentionDays.ONE_WEEK

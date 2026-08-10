@@ -1,0 +1,15 @@
+# CDK DockerImageAsset·docker build의 리포 루트 컨텍스트 최소화
+.git
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.tsbuildinfo
+hub/backend/static
+hub/infra/cdk.out
+earthquake
+ch1
+docs
+.remember
+.claude
+.playwright-mcp
+.DS_Store

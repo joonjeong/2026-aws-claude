@@ -90,14 +90,17 @@ docs/                # 원 스펙 4건 + 설계 문서 6건 (docs/README.md 참�
 docker build -f hub/Dockerfile -t claude-lab-hub .                      # 전체 앱
 docker build -f hub/Dockerfile --build-arg APPS=quake,market -t hub .   # 부분 빌드
 
-mise run infra:synth       # CDK 템플릿 검증 (자격증명 불요)
+mise run infra:synth       # CDK 템플릿 검증 (docker·자격증명 불요)
 mise run infra:bootstrap   # 계정/리전 최초 1회 (AWS 자격증명 필요)
 mise run infra:diff        # 배포 전 변경분 확인
-IMAGE_URI=<계정>.dkr.ecr.<리전>.amazonaws.com/claude-lab-hub:latest \
-  mise run infra:deploy    # 실배포 — ECR에 push한 이미지 URI 필수
+mise run infra:deploy      # 실배포 — CDK가 hub/Dockerfile을 직접 빌드해
+                           #   부트스트랩 자산 ECR로 push까지 (로컬 docker 필요)
+APPS=quake,market mise run infra:deploy       # 프론트 번들 앱 선택 배포
+IMAGE_URI=<uri> mise run infra:deploy         # 사전 빌드 이미지 사용 (docker 불요)
 ```
 
-배포 후 Secrets Manager의 `BedrockTokenSecretArn` 시크릿에 실제 Bearer 토큰을
-수동 등록해야 LLM 기능이 활성화된다 (CDK 코드·이미지에 비밀 없음).
+이미지는 Fargate 기본 아키텍처에 맞춰 linux/amd64로 빌드된다(Apple Silicon에서도
+교차 빌드). 배포 후 Secrets Manager의 `BedrockTokenSecretArn` 시크릿에 실제
+Bearer 토큰을 수동 등록해야 LLM 기능이 활성화된다 (CDK 코드·이미지에 비밀 없음).
 
 설계 문서와 결정 이력은 [docs/README.md](docs/README.md)에서 시작.
