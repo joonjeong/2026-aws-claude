@@ -65,6 +65,10 @@ SUMMARY_MAX_CHARS: int = 300      # HTML-stripped summary truncation
 # 실측 절단 발생(2026-08-10: 1500 토큰 ≈ 1906자 ≈ 클러스터 2.5개 분량).
 # 최대 5클러스터 × 5매체 프레임 + tones 기준 ~3000 토큰이 필요해 여유분 포함 4000.
 LENS_MAX_TOKENS: int = env_int("NEWSROOM_LENS_MAX_TOKENS", 4000)
+# 생성 실패(절단/계약 위반) 후 재시도 쿨다운. 실패 시 캐시를 비우는 대신
+# 이 시간 동안 Bedrock 재호출을 막아, 공개 엔드포인트 스팸으로 버킷 캐시의
+# 비용 상한이 무력화되는 것을 방지(버킷당 최대 ~bucket/cooldown회).
+LENS_FAIL_COOLDOWN_S: int = env_int("NEWSROOM_LENS_FAIL_COOLDOWN_S", 60)
 LENS_BUCKET_S: int = 600          # same 10-minute bucket → cached answer
 LENS_MODEL: str = env_str("NEWSROOM_LENS_MODEL", "global.anthropic.claude-sonnet-4-6")
 LENS_REGION: str = env_str("NEWSROOM_LENS_REGION", "ap-northeast-2")

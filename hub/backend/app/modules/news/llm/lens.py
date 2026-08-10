@@ -14,8 +14,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 
-from labkit import BucketCachedText
+from labkit import BedrockError, BucketCachedText
 
 from .. import config
 from ..store.articles import ArticleStore
@@ -102,6 +103,9 @@ class Lens:
     def __init__(self, store: ArticleStore) -> None:
         self._store = store
         self._cache = BucketCachedText(config.LENS_BUCKET_S)  # 10-min bucket
+        # 실패 쿨다운 만료 시각(monotonic). 실패 캐시 무효화가 곧바로
+        # "요청당 Bedrock 1회"(비용 증폭)가 되지 않게 재생성 빈도를 제한.
+        self._cooldown_until = 0.0
 
     async def generate(self) -> dict:
         """→ {"clusters", "overview", "cached", "bucket"}.
@@ -110,21 +114,31 @@ class Lens:
         LensParseError (502). The raw text is what gets bucket-cached, so
         a cached bucket never re-hits Bedrock.
         """
-        text, cached, bucket = await self._cache.generate(
-            key="lens",
-            system=SYSTEM_PROMPT,
-            user_text=build_user_text(self._store),
-            max_tokens=config.LENS_MAX_TOKENS,
-            model=config.LENS_MODEL,
-            region=config.LENS_REGION,
-            require_complete=True,  # 절단된 JSON은 502로 조기 실패
-        )
+        if time.monotonic() < self._cooldown_until:
+            raise BedrockError(502, "lens generation cooling down after failure")
+        try:
+            text, cached, bucket = await self._cache.generate(
+                key="lens",
+                system=SYSTEM_PROMPT,
+                user_text=build_user_text(self._store),
+                max_tokens=config.LENS_MAX_TOKENS,
+                model=config.LENS_MODEL,
+                region=config.LENS_REGION,
+                require_complete=True,  # 절단된 JSON은 502로 조기 실패
+            )
+        except BedrockError as exc:
+            if exc.status_code != 503:  # 503(키 없음)은 비용 0 — 쿨다운 불필요
+                self._cooldown_until = (
+                    time.monotonic() + config.LENS_FAIL_COOLDOWN_S
+                )
+            raise
         try:
             data = parse_lens_json(text)
         except LensParseError:
             # 계약 위반 텍스트를 버킷 캐시에 남기면 10분 내내 같은 502가
-            # 반복된다(2026-08-10 장애). 버려서 다음 요청이 재생성하게 한다.
+            # 반복된다(2026-08-10 장애). 버리되, 쿨다운으로 재생성 빈도는 제한.
             self._cache.invalidate("lens")
+            self._cooldown_until = time.monotonic() + config.LENS_FAIL_COOLDOWN_S
             raise
         return {
             "clusters": data.get("clusters", []),
