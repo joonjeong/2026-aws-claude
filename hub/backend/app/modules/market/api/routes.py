@@ -14,8 +14,10 @@ from typing import Any, Awaitable, Callable
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from labkit.cache import TTLCache
+from labkit.poller import PollingCollector
 from pydantic import BaseModel
 
+from ....archive import archive_snapshot
 from ..core import config, hours
 from ..services import ai, charts, kr, sim, us
 from ..services import news as news_svc
@@ -24,6 +26,9 @@ log = logging.getLogger("market.api")
 router = APIRouter()
 cache = TTLCache()
 _last_fetch: dict[str, float] = {}  # cache key -> unix time of last upstream fetch
+
+# 이력 아카이브 대상 — 대시보드 3키만 (상세/차트는 심볼×레인지로 증가량 과다)
+_ARCHIVE_KEYS = {"overview", "quotes:us", "quotes:kr"}
 
 # 심볼 화이트리스트: 임의 문자열이 캐시 키·상류 조회로 흘러가는 것을 차단
 _KNOWN_SYMBOLS = {s for s, _ in config.US_SYMBOLS} | {s for s, _ in config.KR_SYMBOLS}
@@ -43,24 +48,57 @@ async def _cached(key: str, ttl_s: float,
         nonlocal fetched
         fetched = True
         _last_fetch[key] = time.time()
-        return await fetch()
+        value = await fetch()
+        if key in _ARCHIVE_KEYS:
+            # 상류 fetch당 정확히 1회 (워밍 폴러·사용자 요청 무관), best-effort
+            archive_snapshot("market", key, value)
+        return value
 
     value = await cache.get_or_fetch(key, ttl_s, wrapped)
     return value, not fetched
 
 
+# ── 워밍 폴러 — 대시보드 3개 키(overview/quotes:*)만 미리 데운다 ──────────
+# 틱마다 라우트와 같은 _cached() 경로를 지나므로: 캐시가 신선하면 딕셔너리
+# 조회로 끝(상류 호출 0), 만료 시에만 상류 fetch. 즉 상류 호출 빈도는
+# 시장시간 인지 TTL이 그대로 지배하고, 폴러는 만료 직후 공백만 메운다.
+# 종목 상세·차트는 심볼 수 × 레인지만큼 호출이 늘어나므로 워밍하지 않는다.
+def _warm_tick(key: str, ttl_fn: Callable[[], int],
+               fetch: Callable[[], Awaitable[Any]]) -> Callable[[], Awaitable[Any]]:
+    async def tick() -> Any:
+        value, _hit = await _cached(key, ttl_fn(), fetch)
+        return value
+
+    return tick
+
+
+warm_pollers: list[PollingCollector] = [] if config.WARM_INTERVAL <= 0 else [
+    PollingCollector("market-overview", config.WARM_INTERVAL,
+                     _warm_tick("overview", hours.overview_ttl, us.fetch_overview)),
+    PollingCollector("market-quotes-us", config.WARM_INTERVAL,
+                     _warm_tick("quotes:us", lambda: hours.quote_ttl("US"),
+                                us.fetch_us_quotes)),
+    PollingCollector("market-quotes-kr", config.WARM_INTERVAL,
+                     _warm_tick("quotes:kr", lambda: hours.quote_ttl("KR"),
+                                kr.fetch_kr_quotes)),
+]
+
+
 def health_info() -> dict[str, Any]:
-    """Module health: no pollers — report cache keys and last upstream fetches."""
+    """Module health: warm pollers + cache keys and last upstream fetches."""
     now = time.time()
+    cached_keys = sorted(
+        k for k, (exp, _) in cache._data.items() if exp > now  # noqa: SLF001
+    )
     return {
         "status": "ok",
         "ai_token": ai.token_present(),
-        "cached_keys": sorted(
-            k for k, (exp, _) in cache._data.items() if exp > now  # noqa: SLF001
-        ),
+        "cache_entries": len(cached_keys),
+        "cached_keys": cached_keys,
         "last_fetch": {
             k: round(now - t, 1) for k, t in sorted(_last_fetch.items())
         },  # seconds ago
+        "pollers": [p.status for p in warm_pollers],
     }
 
 

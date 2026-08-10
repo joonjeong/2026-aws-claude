@@ -12,7 +12,7 @@ same-origin at /market/, so CORS is unnecessary and was dropped. For frontend
 dev, use the Vite dev-server proxy instead (hub/frontend/market/vite.config.ts
 proxies /api -> http://localhost:8000).
 """
-from .api.routes import health_info, router  # noqa: F401  (router: hub contract)
+from .api.routes import health_info, router, warm_pollers  # noqa: F401  (router: hub contract)
 
 META = {
     "id": "market",
@@ -23,11 +23,15 @@ META = {
 
 
 async def startup() -> None:
-    """No pollers — all data is fetched on demand behind the TTL cache."""
+    """워밍 폴러 시작 — 대시보드 캐시(overview/quotes)를 미리 데운다.
+    상세·차트는 여전히 on-demand (routes.py 폴러 주석 참조)."""
+    for p in warm_pollers:
+        p.start()
 
 
 async def shutdown() -> None:
-    """No pollers — nothing to stop."""
+    for p in warm_pollers:
+        p.stop()
 
 
 def health() -> dict:

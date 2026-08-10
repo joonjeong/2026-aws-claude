@@ -89,6 +89,9 @@ INDICATORS: list[tuple[str, str]] = [  # (yf ticker, display name) — lab 11종
 # ---------------------------------------------------------------------------
 TTL_OPEN = env_int("MARKET_TTL_OPEN", 45)
 TTL_CLOSED = env_int("MARKET_TTL_CLOSED", 600)
+# 워밍 폴러 틱 간격(초). 틱은 TTL이 만료됐을 때만 상류를 호출하므로
+# 실제 호출 빈도는 TTL_OPEN/TTL_CLOSED가 지배한다. 0이면 폴러 비활성.
+WARM_INTERVAL = env_int("MARKET_WARM_INTERVAL", 30)
 CHART_TTL: dict[str, int] = {"1w": 300, "1m": 900, "3m": 3600, "1y": 3600}
 ORDERBOOK_TTL = 45   # simulated order book (per symbol)
 INVESTORS_TTL = 600  # simulated 10-day investor flows (per symbol)
