@@ -10,6 +10,7 @@ import logging
 import httpx
 from labkit import PollingCollector
 
+from ...archive import archive_entities
 from . import config
 from .store import store
 
@@ -66,9 +67,15 @@ async def fetch_feed() -> list[dict]:
     return normalize(data.get("features") or [])
 
 
+def _on_result(events: list[dict]) -> None:
+    store.ingest(events)
+    # 이력 아카이브 (best-effort) — id PK의 INSERT OR IGNORE가 재관측을 걸러낸다
+    archive_entities("quake", [(e["id"], e) for e in events])
+
+
 collector = PollingCollector(
     name="quake-usgs",
     interval_s=config.POLL_INTERVAL_S,
     fetch=fetch_feed,
-    on_result=store.ingest,
+    on_result=_on_result,
 )

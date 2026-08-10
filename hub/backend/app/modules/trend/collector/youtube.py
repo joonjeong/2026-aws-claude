@@ -29,6 +29,7 @@ import httpx
 from labkit.cache import time_bucket
 from labkit.poller import PollingCollector
 
+from ....archive import archive_snapshot
 from .. import config
 from ..store.snapshots import SnapshotStore
 
@@ -167,7 +168,9 @@ def create_collector(store: SnapshotStore) -> PollingCollector:
 
     def on_result(pairs: list[tuple[int, dict[str, Any]]]) -> None:
         for bucket, snapshot in pairs:
-            store.put(bucket, snapshot)
+            if store.put(bucket, snapshot):
+                # 신규 버킷만 이력 아카이브 (best-effort) — 재수집 no-op 유지
+                archive_snapshot("trend", "trending", {"bucket": bucket, **snapshot})
 
     return PollingCollector(
         name="youtube-trending",

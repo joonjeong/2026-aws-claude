@@ -11,6 +11,7 @@ import asyncio
 
 from labkit import PollingCollector
 
+from ...archive import archive_entities
 from . import config
 from .collector.rss import fetch_articles
 from .llm.lens import Lens
@@ -23,6 +24,8 @@ def _make_collector(source: dict, store: ArticleStore) -> PollingCollector:
 
     def on_result(articles: list[dict]) -> None:
         store.ingest(source["id"], articles)
+        # 이력 아카이브 (best-effort) — link PK, 기사 dict에 source 포함됨
+        archive_entities("news", [(a["link"], a) for a in articles])
 
     return PollingCollector(
         name=source["id"],

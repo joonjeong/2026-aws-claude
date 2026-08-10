@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 from . import config
+from .archive import archive_counts, prune_poller
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ for mid in config.ENABLED_MODULES:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    prune_poller.start()  # 아카이브 프루닝: 기동 직후 1회 + 24시간 간격
     for mid, mod in _modules.items():
         await mod.startup()
         logger.info("module %s started", mid)
@@ -35,6 +37,7 @@ async def lifespan(app: FastAPI):
     for mid, mod in reversed(list(_modules.items())):
         await mod.shutdown()
         logger.info("module %s stopped", mid)
+    prune_poller.stop()
 
 
 app = FastAPI(title="claude-lab hub", lifespan=lifespan)
@@ -45,7 +48,11 @@ for mid, mod in _modules.items():
 
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok", "modules": {mid: mod.health() for mid, mod in _modules.items()}}
+    return {
+        "status": "ok",
+        "archive": archive_counts(),
+        "modules": {mid: mod.health() for mid, mod in _modules.items()},
+    }
 
 
 @app.get("/api/modules")
