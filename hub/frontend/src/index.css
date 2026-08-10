@@ -21,45 +21,77 @@ body {
 }
 button { font: inherit; color: inherit; }
 
-/* ── 셸 톱바 ──────────────────────────────────────────────── */
-.shell-bar {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px; border-bottom: 1px solid var(--border);
-  background: var(--card); position: sticky; top: 0; z-index: 100;
-}
-.shell-title { font-weight: 600; margin-right: auto; }
-.shell-btn {
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: .85rem;
-}
-.shell-btn:hover { border-color: var(--accent); }
+/* ── 셸 레이아웃 (사이드바 + 콘텐츠) ─────────────────────────── */
+.shell { display: flex; min-height: 100vh; }
+.shell-content { flex: 1; min-width: 0; }
 .shell-loading { padding: 60px; text-align: center; color: var(--muted); }
 
 /* market은 랩 보너스로 듀얼 테마 전환 — 팔레트는 앱 스코프(market.css)가 소유 */
 .app-market { color-scheme: light dark; }
 
-/* ── 런처 ─────────────────────────────────────────────────── */
-.launcher-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20px 28px; border-bottom: 1px solid var(--border);
+/* ── 사이드바 ─────────────────────────────────────────────── */
+.sidebar {
+  width: 220px; flex: none; display: flex; flex-direction: column;
+  background: var(--card); border-right: 1px solid var(--border);
+  position: sticky; top: 0; height: 100vh;
 }
-.launcher-header h1 { font-size: 1.25rem; }
-.launcher-header h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: .85rem; }
-.launcher-grid {
-  max-width: 1080px; margin: 0 auto; padding: 36px 20px;
+.sidebar-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px 16px; border: 0; background: none; cursor: pointer;
+  font-weight: 700; font-size: 1rem; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.brand-icon { color: var(--accent); }
+.sidebar-nav {
+  flex: 1; padding: 10px 8px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 10px; border: 0; background: none; border-radius: 8px;
+  cursor: pointer; font-size: .9rem; text-align: left;
+}
+.nav-item:hover:not(.disabled):not(.active) { background: var(--bg); }
+.nav-item.active { background: var(--accent); color: #fff; }
+.nav-item.disabled { opacity: .45; cursor: not-allowed; }
+.nav-icon { flex: none; }
+.nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-foot { padding: 10px 8px; border-top: 1px solid var(--border); }
+
+@media (max-width: 720px) {
+  .sidebar { width: 56px; }
+  .brand-name, .nav-label { display: none; }
+  .sidebar-brand { justify-content: center; padding: 18px 0; }
+  .nav-item { justify-content: center; }
+}
+
+/* ── 시스템 홈 ────────────────────────────────────────────── */
+.home-header { padding: 24px 28px 0; }
+.home-header h1 { font-size: 1.25rem; }
+.home-header h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: .85rem; }
+.home-grid {
+  padding: 24px 28px 36px;
   display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;
 }
-.launcher-card {
+.home-card {
   display: block; background: var(--card); border: 1px solid var(--border);
   border-radius: 14px; padding: 22px; text-align: left; cursor: pointer;
   box-shadow: var(--shadow); transition: transform .12s ease, border-color .12s ease;
 }
-.launcher-card:hover:not(.disabled) { transform: translateY(-2px); border-color: var(--accent); }
-.launcher-card.disabled { opacity: .55; cursor: not-allowed; }
+.home-card:hover:not(.disabled) { transform: translateY(-2px); border-color: var(--accent); }
+.home-card.disabled { opacity: .55; cursor: not-allowed; }
 .card-icon { font-size: 2rem; }
 .card-title { font-size: 1.05rem; font-weight: 600; margin: 10px 0 4px; }
 .card-tagline { color: var(--muted); font-size: .85rem; line-height: 1.45; min-height: 2.5em; }
 .card-status { margin-top: 14px; font-size: .78rem; display: flex; gap: 6px; align-items: center; color: var(--muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
 .dot.off { background: var(--muted); }
-.launcher-empty { color: var(--muted); text-align: center; grid-column: 1 / -1; padding: 60px 0; }
+.home-empty { color: var(--muted); text-align: center; grid-column: 1 / -1; padding: 60px 0; }
+
+/* ── Laboratory 빈 상태 ───────────────────────────────────── */
+.lab-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 70vh; gap: 8px; color: var(--muted); text-align: center; padding: 20px;
+}
+.lab-icon { font-size: 3rem; }
+.lab-empty h2 { color: var(--text); }
