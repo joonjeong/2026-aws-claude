@@ -168,7 +168,7 @@ def land(root: Path, ts: float, csv_text: str, meta: dict) -> int:
     rows = parse(csv_text)
     _append(_part(root, "landing", SOURCE, "flashpoint", ts=ts), [_jsonl(envelope)])
     _append(_part(root, "bronze", "flashpoint_events", f"source={SOURCE}", ts=ts),
-            [_jsonl({"source": SOURCE, **r}) for r in rows])
+            [_jsonl(r) for r in rows])
     return len(rows)
 
 

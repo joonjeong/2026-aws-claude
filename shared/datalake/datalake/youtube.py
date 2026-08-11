@@ -105,14 +105,12 @@ def land(root: Path, ts: float, payload: dict, meta: dict) -> int:
     }
     _append(_part(root, "landing", SOURCE, "trend", ts=ts), [_jsonl(envelope)])
     _append(_part(root, "bronze", "trend_videos", f"source={SOURCE}", ts=ts),
-            [_jsonl({"source": SOURCE,
-                     **{k: i[k] for k in ("video_id", "title", "channel",
+            [_jsonl({**{k: i[k] for k in ("video_id", "title", "channel",
                                           "category_id", "thumbnail",
                                           "published_at")},
                      "first_seen": ts, "last_seen": ts}) for i in items])
     _append(_part(root, "bronze", "trend_video_stats", f"source={SOURCE}", ts=ts),
-            [_jsonl({"source": SOURCE, "video_id": i["video_id"],
-                     "ts": bucket_ts, "rank": rank,
+            [_jsonl({"video_id": i["video_id"], "ts": bucket_ts, "rank": rank,
                      "view_count": i["view_count"], "like_count": i["like_count"]})
              for rank, i in enumerate(items, start=1)])
     return len(items)

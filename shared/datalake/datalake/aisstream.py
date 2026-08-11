@@ -151,8 +151,7 @@ def flush(root: Path, preset: str, buffer: list[tuple[float, dict]]) -> int:
     tables: dict[str, list[str]] = {}
     for t, msg in buffer:
         for table, rows in to_vessel_and_position(msg, t).items():
-            tables.setdefault(table, []).extend(
-                _jsonl({"source": SOURCE, **r}) for r in rows)
+            tables.setdefault(table, []).extend(map(_jsonl, rows))
     for table, lines in tables.items():
         _append(_part(root, "bronze", table, f"source={SOURCE}", ts=ts), lines)
     n = len(buffer)

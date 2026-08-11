@@ -174,11 +174,11 @@ def land(root: Path, kind: str, ts: float, payload: dict, meta: dict,
     if not bronze:
         return 0  # 전세계 스냅샷은 landing만 (홍수 방지)
     flights = parse(payload, now=ts)
-    # 모든 bronze 행에 source(공급자) 컬럼 — 같은 테이블에 섞여도 출처 구분
+    # 공급자는 source= 파티션 경로가 담는다 (행 중복 저장 없음 — Hive 관례)
     _append(_part(root, "bronze", "contrail_aircraft", f"source={SOURCE}", ts=ts),
-            [_row({"source": SOURCE, **to_aircraft_row(f)}) for f in flights])
+            [_row(to_aircraft_row(f)) for f in flights])
     _append(_part(root, "bronze", "contrail_positions", f"source={SOURCE}", ts=ts),
-            [_row({"source": SOURCE, **to_position_row(f)}) for f in flights])
+            [_row(to_position_row(f)) for f in flights])
     return len(flights)
 
 

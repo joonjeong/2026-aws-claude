@@ -37,8 +37,9 @@ uv run datalake-<원천> [--output <root>]
    └─▶ bronze/<table>/source=<공급자>/dt=…/part-HH.jsonl        파싱·타입화 행 append (중복 허용)
 ```
 
-- **공급자 정보 이중 기록**: `source=` Hive 파티션(물리 분리·경로 프루닝·
-  공급자 단위 재처리) + 행 안의 `source` 컬럼(파일 밖에서도 자기서술).
+- **공급자는 `source=` 파티션 경로가 단독 기록** (Hive 관례 — 행에 중복
+  저장하지 않음): 물리 분리·경로 프루닝·공급자 단위 재처리. 소비 측은
+  `hive_partitioning`으로 경로에서 source 컬럼을 복원한다.
 - **값 없는 키는 생략**: 공급자 고유 필드(contrail의 origin_country는
   opensky만, type/reg는 adsblol만)는 있는 행에만 존재 — null 패딩 없음.
   스키마 합집합은 소비 측(DuckDB `union_by_name` 등)이 자동 수행.
@@ -74,8 +75,9 @@ mise run datalake:smoke              # 무키 원천 스모크
 mise run datalake:test               # 테스트
 
 # 즉석 조회 (DuckDB) — bronze는 파싱된 행이라 바로 분석 가능
-# SELECT * FROM read_json_auto('data/bronze/contrail_aircraft/*/*/*.jsonl');
-# WHERE source='adsblol' 조건은 source= 파티션 프루닝으로 동작
+# SELECT * FROM read_json_auto('data/bronze/contrail_aircraft/*/*/*.jsonl',
+#                              hive_partitioning=1);   -- source 컬럼은 경로에서 복원
+# WHERE source='adsblol' 조건은 파티션 프루닝으로 동작
 ```
 
 ## env

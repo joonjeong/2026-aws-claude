@@ -65,7 +65,6 @@ def _to_article(feed_id: str, entry) -> dict | None:
         if not link.startswith(("http://", "https://")) or not title:
             return None  # javascript: 등 오염 스킴·무제목 차단
         return {
-            "source": feed_id,
             "title": title,
             "link": link,
             "published": _published_iso(entry),

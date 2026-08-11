@@ -52,4 +52,5 @@ async def test_collect_lands_both_zones(tmp_path):
     (bronze,) = list(tmp_path.glob("bronze/quake_events/source=*/dt=*/part-*.jsonl"))
     (row,) = [json.loads(x) for x in bronze.read_text().splitlines()]
     assert row["id"] == "us100" and row["mag"] == 4.5
-    assert row["source"] == "usgs_feed"  # 균일 계약 — 모든 bronze 행에 source
+    assert "source" not in row  # 공급자는 source= 파티션 경로가 담당
+    assert bronze.parts[-3] == "source=usgs_feed"

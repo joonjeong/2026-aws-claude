@@ -79,7 +79,7 @@ async def fetch_quotes() -> list[dict]:
 
 
 def to_quote_row(q: dict, ts: float) -> dict:
-    return {"source": SOURCE, "ts": ts, "kind": "quote_kr", "market": "KR",
+    return {"ts": ts, "kind": "quote_kr", "market": "KR",
             **{k: q.get(k) for k in ("symbol", "name", "price", "change",
                                      "change_pct", "volume")}}
 

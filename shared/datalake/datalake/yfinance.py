@@ -103,7 +103,7 @@ def fetch_quotes_us() -> list[dict]:
 
 # ── bronze 평탄화 (market_quotes 행) ─────────────────────────────────
 def to_quote_row(q: dict, kind: str, market: str | None, ts: float) -> dict:
-    row = {"source": SOURCE, "ts": ts, "kind": kind, "market": market,
+    row = {"ts": ts, "kind": kind, "market": market,
            **{k: q.get(k) for k in ("symbol", "name", "price", "change",
                                     "change_pct", "volume")}}
     return {k: v for k, v in row.items() if v is not None}  # 값 없는 키 생략

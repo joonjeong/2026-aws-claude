@@ -54,8 +54,5 @@ async def test_collect_zones(tmp_path, monkeypatch):
     (aircraft,) = list(tmp_path.glob("bronze/contrail_aircraft/source=*/dt=*/part-*.jsonl"))
     (row, *_rest) = [json.loads(x) for x in aircraft.read_text().splitlines()]
     assert row["icao24"] == "a" and "first_seen" in row
-    assert row["source"] == "adsblol"          # 공급자 구분 컬럼
-    assert "origin_country" not in row         # 값 없는 키는 생략 (readsb엔 없음)
-    (positions,) = list(tmp_path.glob("bronze/contrail_positions/source=*/dt=*/part-*.jsonl"))
-    assert all(json.loads(x)["source"] == "adsblol"
-               for x in positions.read_text().splitlines())
+    assert aircraft.parts[-3] == "source=adsblol"  # 공급자는 파티션 경로
+    assert "source" not in row and "origin_country" not in row  # 행 중복·null 패딩 없음
