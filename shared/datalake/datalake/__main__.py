@@ -26,7 +26,26 @@ def _build_runner(sources_arg: str | None) -> Runner:
 
         sinks.append(SqliteSink(config.DB_PATH))
         log.info("SQLite 옵션 존 활성: %s", config.DB_PATH)
+    polls = [*polls, _MaintenanceSource()]
     return Runner(polls, streams, sinks, flush_s=config.FLUSH_S)
+
+
+class _MaintenanceSource:
+    """일 1회 유지보수 잡 — 전일 파티션 압축 + 보존기간 프루닝."""
+
+    id = "maintenance"
+
+    def jobs(self):
+        from .core.maintenance import compress_old_partitions, prune_old_partitions
+        from .core.source import Job
+
+        async def tick():
+            if config.COMPRESS_ENABLED:
+                compress_old_partitions(config.ROOT)
+            prune_old_partitions(config.ROOT, config.RAW_RETENTION_DAYS)
+            return []
+
+        return [Job("datalake-maintenance", 86_400.0, tick)]
 
 
 async def _run(args: argparse.Namespace) -> int:
