@@ -114,9 +114,10 @@ class HubStack(Stack):
             # 검증 (임의 문자열이 빌드 컨테이너에서 명령으로 실행되는 것 차단)
             apps = (
                 self.node.try_get_context("apps")
-                or "quake,news,trend,market,contrail,wake"
+                or "quake,news,trend,market,contrail,wake,flashpoint"
             )
-            allowed = {"quake", "news", "trend", "market", "contrail", "wake"}
+            allowed = {"quake", "news", "trend", "market", "contrail", "wake",
+                       "flashpoint"}
             parts = [p.strip() for p in apps.split(",") if p.strip()]
             if not parts or not set(parts) <= allowed:
                 raise ValueError(

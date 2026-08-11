@@ -5,7 +5,7 @@
 
 # Stage 1: unified frontend (Vite/React, pnpm) — APPS selects which apps are bundled
 FROM node:24-slim AS frontend
-ARG APPS=quake,news,trend,market,contrail,wake
+ARG APPS=quake,news,trend,market,contrail,wake,flashpoint
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /build
 COPY hub/frontend/package.json hub/frontend/pnpm-lock.yaml hub/frontend/pnpm-workspace.yaml ./

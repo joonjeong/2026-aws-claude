@@ -1,0 +1,45 @@
+/* Flashpoint Watch — 모든 선택자는 .app-flashpoint 하위 네임스페이스. */
+
+.app-flashpoint { --map-bg: #ece9e2; --land: #b0a99a; }
+[data-theme="dark"] .app-flashpoint { --map-bg: #14100d; --land: #4a4238; }
+
+.app-flashpoint .wrap { padding: 16px 24px 48px; }
+.app-flashpoint .head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.app-flashpoint .head h1 { font-size: 20px; margin: 0; }
+.app-flashpoint .presets button, .app-flashpoint .chips button {
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  border-radius: 999px; padding: 4px 12px; margin-right: 6px; cursor: pointer;
+}
+.app-flashpoint .presets button.on, .app-flashpoint .chips button.on {
+  border-color: var(--accent); color: var(--accent);
+}
+.app-flashpoint .notice { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.app-flashpoint .stats { display: flex; gap: 16px; margin: 12px 0; color: var(--muted); }
+.app-flashpoint .stats b { color: var(--text); }
+.app-flashpoint .map {
+  width: 100%; background: var(--map-bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.app-flashpoint .map .geo-ocean { fill: var(--map-bg); }
+.app-flashpoint .map .geo-land { fill: none; stroke: var(--land); stroke-width: 1; }
+.app-flashpoint .event { cursor: pointer; opacity: .75; }
+.app-flashpoint .event.selected { opacity: 1; stroke: var(--accent); stroke-width: 1.5; }
+.app-flashpoint .brief { margin: 16px 0; }
+.app-flashpoint .brief button {
+  border: 1px solid var(--accent); background: var(--card); color: var(--accent);
+  border-radius: 6px; padding: 6px 14px; cursor: pointer;
+}
+.app-flashpoint .brief p { background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; box-shadow: var(--shadow); white-space: pre-wrap; }
+.app-flashpoint .brief .error { color: var(--bad); }
+.app-flashpoint .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.app-flashpoint .tbl th, .app-flashpoint .tbl td {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
+}
+.app-flashpoint .tbl tr { cursor: pointer; }
+.app-flashpoint .tbl tr.on td { color: var(--accent); }
+.app-flashpoint .tbl .dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 6px; vertical-align: baseline;
+}
+.app-flashpoint .tbl a { color: var(--accent); }
