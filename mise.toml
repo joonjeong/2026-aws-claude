@@ -63,7 +63,7 @@ dir = "hub/infra"
 run = 'cdk diff ${IMAGE_URI:+-c image_uri=$IMAGE_URI} ${ARCH:+-c arch=$ARCH}'
 
 [tasks."infra:deploy"]
-description = "실배포 — 기본은 CDK가 Dockerfile 빌드→자산 ECR push→Fargate까지 (docker 필요). env: IMAGE_URI=사전 빌드 이미지(선택), APPS=프론트 번들 앱 선택, ARCH=arm64(기본)|amd64 — 이미지·Fargate 아키텍처(빌드 호스트와 맞춰야 함, 다르면 qemu binfmt 필요)"
+description = "실배포 — 기본은 CDK가 Dockerfile 빌드→자산 ECR push→Fargate까지 (docker 필요). env: IMAGE_URI=사전 빌드 이미지(선택), APPS=프론트 번들 앱 선택, ARCH=arm64(기본)|amd64 — 이미지·Fargate 아키텍처(빌드 호스트와 맞춰야 함, 다르면 qemu binfmt 필요), WAKE_AIS_KEY=AISStream 키(설정 시 컨테이너 env로 주입, 미설정이면 wake 수집기 비활성)"
 dir = "hub/infra"
 run = 'cdk deploy ${IMAGE_URI:+-c image_uri=$IMAGE_URI} ${APPS:+-c apps=$APPS} ${ARCH:+-c arch=$ARCH}'
 

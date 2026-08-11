@@ -25,6 +25,7 @@ def health() -> dict:
                + region_collector.consecutive_failures)
     return {
         "status": "ok" if failing == 0 else "degraded",
+        "source": config.SOURCE,
         "auth": "oauth" if config.HAS_AUTH else "anonymous",
         "global_flights": len(store.global_flights),
         "region_flights": len(store.trails),

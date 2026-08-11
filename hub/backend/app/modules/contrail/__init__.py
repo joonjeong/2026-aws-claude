@@ -1,4 +1,4 @@
-"""Contrail Watch — 전 세계 항공 트래픽 + 관심지역 항적 (OpenSky ADS-B).
+"""Contrail Watch — 전 세계 항공 트래픽 + 관심지역 항적 (ADS-B, 기본 adsb.lol).
 
 Hub module contract: META, router, startup(), shutdown(), health().
 """
@@ -10,7 +10,7 @@ from .collector import global_collector, region_collector
 META = {
     "id": "contrail",
     "title": "Contrail Watch",
-    "tagline": "전 세계 항공 트래픽·관심지역 항적 — OpenSky",
+    "tagline": "전 세계 항공 트래픽·관심지역 항적 — ADS-B",
     "icon": "✈️",
 }
 

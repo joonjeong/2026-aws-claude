@@ -112,8 +112,11 @@ class HubStack(Stack):
         else:
             # APPS는 Dockerfile RUN의 셸 변수로 들어가므로 모듈 id 허용 목록으로
             # 검증 (임의 문자열이 빌드 컨테이너에서 명령으로 실행되는 것 차단)
-            apps = self.node.try_get_context("apps") or "quake,news,trend,market"
-            allowed = {"quake", "news", "trend", "market"}
+            apps = (
+                self.node.try_get_context("apps")
+                or "quake,news,trend,market,contrail,wake"
+            )
+            allowed = {"quake", "news", "trend", "market", "contrail", "wake"}
             parts = [p.strip() for p in apps.split(",") if p.strip()]
             if not parts or not set(parts) <= allowed:
                 raise ValueError(
@@ -203,6 +206,19 @@ class HubStack(Stack):
                 operating_system_family=ecs.OperatingSystemFamily.LINUX,
             ),
         )
+        # WAKE_AIS_KEY — 배포 실행 환경의 로컬 env를 synth 시점에 읽어 컨테이너
+        # env로 주입한다(미설정이면 wake 수집기만 비활성, health=no_key).
+        # 트레이드오프: 값이 CloudFormation 템플릿에 평문으로 남는다
+        # (cloudformation:GetTemplate 권한자에게 노출). AISStream 무료 키라
+        # 수용하고, Bedrock 토큰처럼 기밀도가 높으면 Secrets Manager 패턴을 쓸 것.
+        # 값이 바뀌면 태스크 정의가 새 리비전이 되어 롤링 배포가 자동 강제된다.
+        wake_ais_key = (os.environ.get("WAKE_AIS_KEY") or "").strip()
+        if not wake_ais_key:
+            cdk.Annotations.of(self).add_warning(
+                "WAKE_AIS_KEY 미설정 — wake 수집기가 비활성 상태로 배포된다 "
+                "(WAKE_AIS_KEY=... cdk deploy 로 주입)"
+            )
+
         task_def.add_container(
             "web",
             image=container_image,
@@ -210,7 +226,10 @@ class HubStack(Stack):
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="hub", log_retention=logs.RetentionDays.ONE_WEEK
             ),
-            environment={"PORT": str(CONTAINER_PORT)},
+            environment={
+                "PORT": str(CONTAINER_PORT),
+                **({"WAKE_AIS_KEY": wake_ais_key} if wake_ais_key else {}),
+            },
             secrets={
                 "AWS_BEARER_TOKEN_BEDROCK": ecs.Secret.from_secrets_manager(
                     bedrock_token_secret
