@@ -1,76 +1,80 @@
+import json
+
 import pytest
 
-from datalake.sources import pykrx, yfinance
+from datalake import pykrx, yfinance
 
 
-async def test_yfinance_fetch_requested_kinds():
-    calls = {"market_overview": 0, "market_quotes_us": 0}
-
-    async def fetch_overview():
-        calls["market_overview"] += 1
-        return {"indices": [], "indicators": []}
-
-    async def fetch_us():
-        calls["market_quotes_us"] += 1
-        return [{"symbol": "AAPL"}]
-
-    client = yfinance.YFinanceClient(
-        fetchers={"market_overview": fetch_overview,
-                  "market_quotes_us": fetch_us})
-
-    recs = await client.fetch(["market_overview"])
-    assert [(r.source, r.kind) for r in recs] == [("yfinance", "market_overview")]
-    assert calls == {"market_overview": 1, "market_quotes_us": 0}  # 요청 kind만
-
-    recs = await client.fetch()  # 기본: 전체
-    assert [r.kind for r in recs] == ["market_overview", "market_quotes_us"]
-
-
-async def test_yfinance_isolates_kind_failure():
-    async def bad():
-        raise RuntimeError("upstream")
-
-    async def good():
-        return [{"symbol": "AAPL"}]
-
-    client = yfinance.YFinanceClient(
-        fetchers={"market_overview": bad, "market_quotes_us": good})
-    recs = await client.fetch()
-    assert [r.kind for r in recs] == ["market_quotes_us"]  # 실패 kind만 빠짐
-
-
-async def test_yfinance_unknown_kind_raises():
-    client = yfinance.YFinanceClient(fetchers={})
-    with pytest.raises(ValueError):
-        await client.fetch(["nope"])
-
-
-async def test_pykrx_fetch():
-    async def fake():
-        return [{"symbol": "005930", "price": 70000.0}]
-
-    (rec,) = await pykrx.PykrxClient(fetcher=fake).fetch()
-    assert rec.source == "pykrx" and rec.kind == "market_quotes_kr"
-    assert rec.payload[0]["symbol"] == "005930"
-
-
-# ── 심볼 유니버스 (hub 값 복사 검증) ──────────────────────────
-def test_symbol_universe():
-    assert len(yfinance.US_SYMBOLS) == 50 and len(pykrx.KR_SYMBOLS) == 50
-    assert yfinance.ACTIVE_US[0] == ("AAPL", "Apple")
-    assert pykrx.ACTIVE_KR[0] == ("005930", "삼성전자")
-    assert len(yfinance.ACTIVE_US) == 20 and len(pykrx.ACTIVE_KR) == 20
-    assert len(yfinance.INDICES) == 5 and len(yfinance.INDICATORS) == 11
+def test_symbol_lists():
+    assert len(yfinance.load_symbols()["us"]["symbols"]) == 50
+    assert len(pykrx.load_symbols()["kr"]["symbols"]) == 50
+    assert yfinance.active_us()[0] == ("AAPL", "Apple")
+    assert pykrx.active_kr()[0] == ("005930", "삼성전자")
+    assert len(yfinance.indices()) == 5 and len(yfinance.indicators()) == 11
 
 
 def test_symbol_list_override(tmp_path, monkeypatch):
     custom = tmp_path / "symbols.toml"
-    custom.write_text(
-        '[us]\nsymbols = [["TEST", "Test Co"]]\n'
-        '[kr]\nsymbols = [["000001", "테스트"]]\n'
-        '[indices]\nitems = [["^T", "T", "US"]]\n'
-        '[indicators]\nitems = [["X=F", "엑스"]]\n', encoding="utf-8")
+    custom.write_text('[us]\nsymbols = [["TEST", "Test Co"]]\n'
+                      '[kr]\nsymbols = [["000001", "테스트"]]\n'
+                      '[indices]\nitems = [["^T", "T", "US"]]\n'
+                      '[indicators]\nitems = [["X=F", "엑스"]]\n', encoding="utf-8")
     monkeypatch.setenv("DATALAKE_MARKET_SYMBOLS", str(custom))
-    from datalake.sources import market_symbols
-    data = market_symbols._load()
-    assert data["us"]["symbols"] == [["TEST", "Test Co"]]  # 목록 파일 교체
+    assert yfinance.active_us() == [("TEST", "Test Co")]  # 목록 파일 교체
+    assert pykrx.active_kr() == [("000001", "테스트")]
+
+
+def test_yfinance_flatten():
+    overview = {"indices": [{"symbol": "^KS11", "name": "KOSPI", "price": 3000.0,
+                             "change": 10.0, "change_pct": 0.33, "volume": 0,
+                             "market": "KR"}],
+                "indicators": [{"symbol": "BTC-USD", "name": "비트코인",
+                                "price": 100000.0, "change": -5.0,
+                                "change_pct": -0.01, "volume": 123}]}
+    rows = yfinance.flatten("market_overview", overview, ts=1000.0)
+    assert {(r["kind"], r["symbol"], r["market"]) for r in rows} \
+        == {("index", "^KS11", "KR"), ("indicator", "BTC-USD", None)}
+
+    us = yfinance.flatten("market_quotes_us", [{"symbol": "AAPL"}], ts=1000.0)
+    assert us[0]["kind"] == "quote_us" and us[0]["market"] == "US"
+
+
+async def test_yfinance_collect_with_fake_fetchers(tmp_path):
+    calls = []
+
+    def fetch_overview():
+        calls.append("overview")
+        return {"indices": [], "indicators": [
+            {"symbol": "GC=F", "name": "금", "price": 2400.0,
+             "change": 1.0, "change_pct": 0.04, "volume": 0}]}
+
+    def bad():
+        raise RuntimeError("upstream")
+
+    assert await yfinance.collect(
+        tmp_path, fetchers={"market_overview": fetch_overview,
+                            "market_quotes_us": bad}) == 0  # kind 격리
+
+    (bronze,) = list(tmp_path.glob("bronze/market_quotes/dt=*/part-*.jsonl"))
+    (row,) = [json.loads(x) for x in bronze.read_text().splitlines()]
+    assert row["kind"] == "indicator" and row["symbol"] == "GC=F"
+    assert calls == ["overview"]
+
+
+async def test_yfinance_unknown_kind_raises(tmp_path):
+    with pytest.raises(ValueError):
+        await yfinance.collect(tmp_path, kinds=["nope"], fetchers={})
+
+
+async def test_pykrx_collect_with_fake_fetcher(tmp_path):
+    async def fake():
+        return [{"symbol": "005930", "name": "삼성전자", "price": 70000.0,
+                 "change": 500.0, "change_pct": 0.72, "volume": 1000}]
+
+    assert await pykrx.collect(tmp_path, fetcher=fake) == 0
+    (bronze,) = list(tmp_path.glob("bronze/market_quotes/dt=*/part-*.jsonl"))
+    (row,) = [json.loads(x) for x in bronze.read_text().splitlines()]
+    assert row["kind"] == "quote_kr" and row["market"] == "KR"
+    assert row["symbol"] == "005930"
+    (landing,) = list(tmp_path.glob("landing/pykrx/market_quotes_kr/dt=*/part-*.jsonl"))
+    assert json.loads(landing.read_text())["payload"][0]["price"] == 70000.0

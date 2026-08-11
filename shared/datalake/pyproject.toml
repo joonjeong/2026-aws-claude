@@ -4,42 +4,38 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datalake"
-version = "0.8.0"
-description = "claude-lab 독립 데이터레이크 수집기 — 소스별 one-shot CLI, 스케줄링은 외부 오케스트레이터(Temporal 예정) 소유"
+version = "0.9.0"
+description = "claude-lab 독립 데이터레이크 수집 CLI — 원천당 자기완결 파일, landing+bronze 랜딩"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
     "feedparser>=6",
     "websockets>=12",
-    "pyarrow>=17",
     "yfinance>=0.2",
     "pykrx>=1.0",
 ]
 
 [project.scripts]
-# 명령 = 상류(source) 단위. kind(데이터셋)는 명령이 생산한다.
-datalake-usgs-feed = "datalake.cli.usgs_feed:main"
-# RSS는 표준 포맷 — 단일 명령 + 목록 파일(rss_feeds.toml) 관리
-datalake-rss = "datalake.cli.rss:main"
-datalake-youtube = "datalake.cli.youtube:main"
-datalake-adsblol = "datalake.cli.adsblol:main"
-datalake-opensky = "datalake.cli.opensky:main"
-datalake-aisstream = "datalake.cli.aisstream:main"
-datalake-yfinance = "datalake.cli.yfinance:main"
-datalake-pykrx = "datalake.cli.pykrx:main"
-datalake-gdelt = "datalake.cli.gdelt:main"
-datalake-silver = "datalake.cli.silver:main"
-datalake-bronze = "datalake.cli.bronze:main"
-datalake-maintenance = "datalake.cli.maintenance:main"
+# 명령 = 원천(source) 단위, 파일 하나가 자기완결 (fetch→파싱→landing·bronze)
+datalake-usgs-feed = "datalake.usgs_feed:main"
+datalake-rss = "datalake.rss:main"
+datalake-youtube = "datalake.youtube:main"
+datalake-adsblol = "datalake.adsblol:main"
+datalake-opensky = "datalake.opensky:main"
+datalake-aisstream = "datalake.aisstream:main"
+datalake-yfinance = "datalake.yfinance:main"
+datalake-pykrx = "datalake.pykrx:main"
+datalake-gdelt = "datalake.gdelt:main"
+datalake-maintenance = "datalake.maintenance:main"
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]
 
 [tool.setuptools]
-packages = ["datalake", "datalake.core", "datalake.sources", "datalake.cli"]
+packages = ["datalake"]
 
 [tool.setuptools.package-data]
-"datalake.sources" = ["*.toml"]
+datalake = ["*.toml"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

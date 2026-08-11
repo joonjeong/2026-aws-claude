@@ -2,7 +2,7 @@ import gzip
 import json
 from datetime import date
 
-from datalake.core.maintenance import compress_old_partitions, prune_old_partitions
+from datalake.maintenance import compress_old_partitions, prune_old_partitions
 
 TODAY = date(2026, 8, 11)
 

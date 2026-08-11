@@ -79,35 +79,28 @@ AST 파싱해 `hub.*`/`app.*`/`labkit` import를 발견하면 실패한다.
 경로를 알지도 못한다. 어느 쪽이 죽어도 서로 영향이 없고, 외부에서 겹치는
 것은 API 쿼터뿐이다(§8).
 
-## 4. 코드 구조 — 클라이언트 / CLI / 모델의 분리
+## 4. 코드 구조 — 원천당 자기완결 파일 (v0.9)
 
 ```
 shared/datalake/datalake/
-├── sources/            ★ 상류별 순수 클라이언트 — fetch·normalize만.
-│   usgs_feed.py rss.py    저장·경로·스케줄을 모른다 → 어떤 소비자든
-│   youtube.py adsblol.py   (향후 통합 솔루션 포함) 그대로 import 가능
-│   opensky.py aisstream.py
-│   yfinance.py pykrx.py gdelt.py
-├── cli/                ★ 상류별 one-shot 명령 11개 (pyproject scripts)
-│   usgs_feed.py rss.py youtube.py adsblol.py opensky.py
-│   aisstream.py yfinance.py pykrx.py gdelt.py normalize.py maintenance.py
-├── model.py            ★ 정규화 존 데이터 모델의 단일 진실 (pyarrow 스키마)
-├── core/
-│   ├── source.py       Record 봉투 타입
-│   ├── sinks.py        FileSink (Hive 파티션 JSONL append)
-│   ├── transform.py    Record → 테이블 행 (model.py 스펙과 짝)
-│   ├── parquet.py      bronze 순회 + 파티션 물질화(materialize)
-│   ├── stream.py       WebSocket 수집기 (백오프 재접속, connect 주입)
-│   ├── maintenance.py  gzip·보존 프루닝
-│   └── env.py          env 헬퍼
-└── tests/              56개 — 독립성 게이트·정규화 동형성·멱등성·CLI 경로
+├── usgs_feed.py rss.py youtube.py adsblol.py opensky.py
+│   aisstream.py yfinance.py pykrx.py gdelt.py
+│     ★ 파일 하나 = 원천 하나: 순수 파싱(map/filter) → 랜딩(append) →
+│       collect(IO) → main(argparse). 파일 간 import 없음 —
+│       test_independence.py가 hub/labkit 금지와 내부 상호 import를 검사
+├── maintenance.py        landing·bronze 전일 gzip + 보존 프루닝
+├── rss_feeds.toml        RSS 수집 대상 목록 (DATALAKE_RSS_FEEDS로 교체)
+└── market_symbols.toml   market 심볼·지수·지표 목록 (DATALAKE_MARKET_SYMBOLS)
 ```
 
-## 5. 데이터 모델 (silver 존, `model.py`)
+중복(랜딩 헬퍼 ~20줄)은 자기완결의 의도된 비용이다 — 파일 하나를 위에서
+아래로 읽으면 그 원천의 파이프라인 전체가 보인다.
 
-hub 정규화 스키마와 동형 — hub DB와 조인·비교가 쉽다. market만 JSON
-스냅샷 대신 평탄화했다. Parquet에 스키마가 내장되므로 소비자는 DDL이
-필요 없다.
+## 5. bronze 테이블 (silver→gold는 재설계 예정)
+
+bronze는 파싱·타입화된 행 JSONL(1:1, append, 중복 허용) — hub 정규화
+스키마와 동형이라 조인·비교가 쉽다. market만 JSON 스냅샷 대신 평탄화.
+dedup·정합(silver)과 집계(gold)는 정리된 원천을 기반으로 추후 재설계한다.
 
 | 테이블 | 자연키 | 병합 | 내용 |
 |---|---|---|---|
@@ -122,12 +115,10 @@ hub 정규화 스키마와 동형 — hub DB와 조인·비교가 쉽다. market
 | flashpoint_events | event_id | 최초 관측 | GDELT 분쟁 이벤트 (CAMEO 루트 14~20) |
 | market_quotes | (kind, symbol, ts) | 최초 관측 | 시세 평탄화 — kind: index·indicator·quote_us·quote_kr |
 
-- **파티션 의미**: `dt=` 는 "그 날짜(UTC)에 관측된 행". 같은 자연키가 여러
-  날짜에 나타날 수 있다(예: quake 2.5_day 피드). 전역 유일이 필요하면
-  소비 측에서 `SELECT DISTINCT ON (key)`.
-- **dim 병합** = 후속 관측의 non-null 필드가 갱신, first_seen=min /
-  last_seen=max — hub의 COALESCE 업서트와 동형.
-- landing만이 진실: bronze는 `datalake-bronze`로, silver는 `datalake-silver`로 재생성.
+- **파티션 의미**: `dt=` 는 "그 날짜(UTC)에 관측된 행". 중복·자연키
+  dedup은 silver 재설계 시의 몫 — 소비 측은 `DISTINCT ON (key)`로 처리.
+- landing만이 진실: bronze는 landing에서 언제든 재파생 가능 (파싱 함수가
+  순수라 재실행 = 같은 결과).
 - gdelt landing은 CAMEO 필터 **전** CSV 전문을 보존 — hub가 버리는
   이벤트도 레이크에는 남는다.
 
@@ -147,14 +138,12 @@ Temporal, …) 아래 명령을 주기 실행하면 되고, 계약은 종료 코
                ──▶ uv run datalake-pykrx         (장중 45s/장외 600s)
                ──▶ uv run datalake-gdelt         (매 900s)     │   2 = 상류 비활성
                ──▶ uv run datalake-aisstream --duration N (겹침 없는 구간)  (키·엑스트라 부재)
-               ──▶ uv run datalake-silver        (매시 + 자정 후 전일 확정)
                ──▶ uv run datalake-maintenance   (일 1회)      ┘
 ```
 
 수집 주기 권장값은 hub 폴러 기본값과 동일하다(사용자 요구). 멱등성이
-스케줄 실수를 흡수한다: 수집 재실행은 landing·bronze append일 뿐이고(silver가 키
-dedup), silver 재실행은 파티션 재작성, flashpoint는 상태 파일로 같은
-15분 파일을 스킵한다.
+스케줄 실수를 흡수한다: 수집 재실행은 landing·bronze append일 뿐이고, gdelt는 상태 파일로 같은
+15분 파일을 스킵한다. 파싱 함수가 순수라 재파생도 결정적이다.
 
 ## 7. Postgres/FDW 소비
 
@@ -196,6 +185,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.6 | RSS 단일 명령(`datalake-rss`) + 목록 파일(rss_feeds.toml) 관리. 사설·표준-준(準) 상류는 개별 명령 유지 | 사용자 결정: 표준 포맷은 클라이언트가 제네릭 — 대상 관리는 코드가 아닌 목록으로 |
 | v0.7 | market 심볼 목록 파일(market_symbols.toml) + yfinance·pykrx 기본 의존성 승격(extra 폐지) | 사용자 결정: 대상은 목록으로, extra 미설치=코드 2 함정 제거 — 전 상류 실수집 검증 완료 |
 | v0.8 | landing/bronze 분리: 수집 명령이 경량 ETL까지 수행해 bronze(파싱 레코드) 랜딩, silver는 dedup·컬럼화만(구 normalize 분해). 전 명령 `--output` 파라미터 | 사용자 결정: normalize 비대 해소 + 존 의미를 일반적 메달리온과 정합 (landing=원본, bronze=무가공 테이블) |
+| v0.9 | 원천당 자기완결 파일 재작성: core/sources/cli 3분할·model.py·pyarrow 제거, map-filter 펑셔널 파이프라인, silver·bronze 리빌드 CLI 삭제 (silver→gold는 정리된 원천 기반 재설계 예정) | 사용자 결정: 레이어 추상화 대신 파일 하나가 fetch→파싱→랜딩까지 — 내부 상호 import도 테스트로 금지 |
 
 ## 10. 검증 상태 (2026-08-11)
 

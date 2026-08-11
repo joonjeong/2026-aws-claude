@@ -1,44 +1,38 @@
+import json
+
 import httpx
 import pytest
 
-from datalake.sources import adsblol
+from datalake import adsblol
 
 
-def test_adsblol_url_is_raw_unencoded():
+def test_url_is_raw_unencoded():
     # re-api는 %2C·jv2= 를 400으로 거부 — 원시 쿼리 형식 고정 (hub와 동일)
-    url = adsblol.adsblol_url("https://re-api.adsb.lol/", (30.0, 120.0, 45.0, 135.0))
-    assert url == "https://re-api.adsb.lol/?box=30.0,45.0,120.0,135.0&jv2"
+    assert adsblol.url_for((30.0, 120.0, 45.0, 135.0)) \
+        == "https://re-api.adsb.lol/?box=30.0,45.0,120.0,135.0&jv2"
 
 
-def test_normalize_readsb_units_and_defense():
-    payload = {"ac": [
+def test_parse_units_and_defense():
+    rows = adsblol.parse({"ac": [
         {"hex": "abc123", "flight": "KAL123 ", "lat": 37.5, "lon": 127.0,
          "alt_baro": 10000, "gs": 400, "track": 90, "seen_pos": 2.0,
          "t": "B738", "r": "HL1234"},
         {"hex": "def456", "lat": 35.0, "lon": 129.0, "alt_baro": "ground",
          "calc_track": 180},
-        {"hex": "nopos1"},                       # 위치 없음 → 스킵
-        "junk",                                  # 깨진 항목 → 격리
-    ]}
-    rows = adsblol.normalize(payload, now=1000.0)
+        {"hex": "nopos1"},     # 위치 없음 → 필터
+        "junk",                # 깨진 항목 → 격리
+    ]}, now=1000.0)
     assert len(rows) == 2
-
-    a = rows[0]
-    assert a["id"] == "abc123" and a["callsign"] == "KAL123"
+    a, g = rows
     assert a["alt_m"] == pytest.approx(10000 * 0.3048)
     assert a["velocity_ms"] == pytest.approx(400 * 0.514444)
-    assert a["ts"] == 998.0  # now - seen_pos
-    assert a["on_ground"] is False
-    assert a["type"] == "B738" and a["reg"] == "HL1234"
-
-    g = rows[1]
+    assert a["ts"] == 998.0 and a["callsign"] == "KAL123"
     assert g["on_ground"] is True and g["alt_m"] is None
     assert g["track_deg"] == 180.0  # calc_track 폴백
-    assert g["ts"] == 1000.0  # seen_pos 없음 → now
 
 
-async def test_global_and_region_fetch(monkeypatch):
-    monkeypatch.setattr(adsblol, "REGION_SPACING_S", 0.0)  # 테스트에선 대기 생략
+async def test_collect_zones(tmp_path, monkeypatch):
+    monkeypatch.setattr(adsblol, "REGION_SPACING_S", 0.0)
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -46,15 +40,17 @@ async def test_global_and_region_fetch(monkeypatch):
         assert request.headers["user-agent"].startswith("DataLake/0.1")
         return httpx.Response(200, json={"ac": [{"hex": "a", "lat": 1, "lon": 2}]})
 
-    client = adsblol.AdsbLolClient(transport=httpx.MockTransport(handler))
+    assert await adsblol.collect(tmp_path, "both",
+                                 transport=httpx.MockTransport(handler)) == 0
+    assert "box=-90.0,90.0,-180.0,180.0&jv2" in calls[0]  # 전세계 먼저
 
-    (rec,) = await client.fetch_global()
-    assert rec.kind == "contrail_global"
-    assert "box=-90.0,90.0,-180.0,180.0&jv2" in calls[0]
+    kinds = {p.parts[-3] for p in tmp_path.glob("landing/adsblol/*/dt=*/part-*.jsonl")}
+    assert kinds == {"contrail_global", "contrail_region_kr", "contrail_region_japan",
+                     "contrail_region_europe", "contrail_region_us-east"}
 
-    recs = await client.fetch_regions()
-    assert [r.kind for r in recs] == [
-        "contrail_region_kr", "contrail_region_japan", "contrail_region_europe", "contrail_region_us-east"]
-    assert all(r.source == "adsblol" for r in recs)
-    assert recs[0].payload == {"ac": [{"hex": "a", "lat": 1, "lon": 2}]}
-    assert recs[0].meta["bbox"] == "30.0,120.0,45.0,135.0"
+    # bronze는 지역 4개분만 (전세계는 landing만 — 홍수 방지)
+    (positions,) = list(tmp_path.glob("bronze/contrail_positions/dt=*/part-*.jsonl"))
+    assert len(positions.read_text().splitlines()) == 4
+    (aircraft,) = list(tmp_path.glob("bronze/contrail_aircraft/dt=*/part-*.jsonl"))
+    (row, *_rest) = [json.loads(x) for x in aircraft.read_text().splitlines()]
+    assert row["icao24"] == "a" and "first_seen" in row
