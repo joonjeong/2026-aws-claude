@@ -6,7 +6,7 @@ import Home from "./shell/Home";
 import Laboratory from "./shell/Laboratory";
 
 /* 사이드바 메뉴 순서 — virtual:apps 등록 순서와 무관하게 셸이 소유 */
-const MENU_ORDER = ["market", "news", "trend", "quake"];
+const MENU_ORDER = ["market", "news", "trend", "quake", "wake"];
 const orderedApps = MENU_ORDER.map((id) => APPS.find((a) => a.id === id)).filter(
   (a): a is AppDef => Boolean(a),
 );
