@@ -50,7 +50,9 @@ name = "SBS 뉴스(정치)"
 lang = "ko"
 rss_url = "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01"
 
-# mk는 일반 UA 403 봇 차단 — 식별 가능한 커스텀 UA(기본 DataLake UA)로는 200
+# mk는 2026-08-11 22:59 기준 모든 UA(브라우저·NewsroomLens·DataLake)에 403 —
+# UA가 아닌 상류 측 차단(IP/봇 정책)으로 판단. 매체 격리로 나머지는 무영향이며
+# 스케줄 재실행이 곧 재시도. 지속되면 다른 매경 피드 URL 재확인 필요.
 [feeds.mk]
 name = "매일경제"
 lang = "ko"
