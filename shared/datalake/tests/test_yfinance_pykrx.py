@@ -55,9 +55,10 @@ async def test_yfinance_collect_with_fake_fetchers(tmp_path):
         tmp_path, fetchers={"market_overview": fetch_overview,
                             "market_quotes_us": bad}) == 0  # kind 격리
 
-    (bronze,) = list(tmp_path.glob("bronze/market_quotes/dt=*/part-*.jsonl"))
+    (bronze,) = list(tmp_path.glob("bronze/market_quotes/source=*/dt=*/part-*.jsonl"))
     (row,) = [json.loads(x) for x in bronze.read_text().splitlines()]
     assert row["kind"] == "indicator" and row["symbol"] == "GC=F"
+    assert row["source"] == "yfinance"  # 같은 market_quotes에서 공급자 구분
     assert calls == ["overview"]
 
 
@@ -72,9 +73,9 @@ async def test_pykrx_collect_with_fake_fetcher(tmp_path):
                  "change": 500.0, "change_pct": 0.72, "volume": 1000}]
 
     assert await pykrx.collect(tmp_path, fetcher=fake) == 0
-    (bronze,) = list(tmp_path.glob("bronze/market_quotes/dt=*/part-*.jsonl"))
+    (bronze,) = list(tmp_path.glob("bronze/market_quotes/source=*/dt=*/part-*.jsonl"))
     (row,) = [json.loads(x) for x in bronze.read_text().splitlines()]
     assert row["kind"] == "quote_kr" and row["market"] == "KR"
-    assert row["symbol"] == "005930"
+    assert row["symbol"] == "005930" and row["source"] == "pykrx"
     (landing,) = list(tmp_path.glob("landing/pykrx/market_quotes_kr/dt=*/part-*.jsonl"))
     assert json.loads(landing.read_text())["payload"][0]["price"] == 70000.0

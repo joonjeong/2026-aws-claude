@@ -37,8 +37,8 @@ async def test_collect_key_never_leaks_and_lands(tmp_path):
     env = json.loads(landing.read_text())
     assert "SECRETKEY" not in json.dumps(env["meta"])  # 키 비노출
 
-    (videos,) = list(tmp_path.glob("bronze/trend_videos/dt=*/part-*.jsonl"))
-    (stats,) = list(tmp_path.glob("bronze/trend_video_stats/dt=*/part-*.jsonl"))
+    (videos,) = list(tmp_path.glob("bronze/trend_videos/source=*/dt=*/part-*.jsonl"))
+    (stats,) = list(tmp_path.glob("bronze/trend_video_stats/source=*/dt=*/part-*.jsonl"))
     (v,) = [json.loads(x) for x in videos.read_text().splitlines()]
     (s,) = [json.loads(x) for x in stats.read_text().splitlines()]
     assert v["video_id"] == "v1" and "first_seen" in v

@@ -33,9 +33,14 @@ datalake/
 ```
 uv run datalake-<원천> [--output <root>]
    │ fetch 1회
-   ├─▶ landing/<source>/<kind>/dt=…/part-HH.jsonl   원본 봉투 (불변, 진실의 원천)
-   └─▶ bronze/<table>/dt=…/part-HH.jsonl            파싱·타입화 행 append (중복 허용)
+   ├─▶ landing/<source>/<kind>/dt=…/part-HH.jsonl              원본 봉투 (불변, 진실의 원천)
+   └─▶ bronze/<table>/source=<공급자>/dt=…/part-HH.jsonl        파싱·타입화 행 append (중복 허용)
 ```
+
+- **공급자 정보 이중 기록**: `source=` Hive 파티션(물리 분리·경로 프루닝·
+  공급자 단위 재처리) + 행 안의 `source` 컬럼(파일 밖에서도 자기서술).
+  같은 테이블을 공급하는 원천들의 필드는 **합집합** — contrail은
+  `origin_country`(opensky)·`type`/`reg`(adsblol)를 모두 갖고 없는 쪽은 null.
 
 - **봉투 의미론**: `source`=원천(usgs_feed, bbc, adsblol …),
   `kind`=데이터셋(quake, news, contrail_region_kr …). 한 원천이 여러
@@ -68,7 +73,8 @@ mise run datalake:smoke              # 무키 원천 스모크
 mise run datalake:test               # 테스트
 
 # 즉석 조회 (DuckDB) — bronze는 파싱된 행이라 바로 분석 가능
-# SELECT * FROM read_json_auto('data/bronze/quake_events/*/*.jsonl');
+# SELECT * FROM read_json_auto('data/bronze/contrail_aircraft/*/*/*.jsonl');
+# WHERE source='adsblol' 조건은 source= 파티션 프루닝으로 동작
 ```
 
 ## env

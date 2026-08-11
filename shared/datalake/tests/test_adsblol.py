@@ -49,8 +49,14 @@ async def test_collect_zones(tmp_path, monkeypatch):
                      "contrail_region_europe", "contrail_region_us-east"}
 
     # bronze는 지역 4개분만 (전세계는 landing만 — 홍수 방지)
-    (positions,) = list(tmp_path.glob("bronze/contrail_positions/dt=*/part-*.jsonl"))
-    assert len(positions.read_text().splitlines()) == 4
-    (aircraft,) = list(tmp_path.glob("bronze/contrail_aircraft/dt=*/part-*.jsonl"))
+    (positions4,) = list(tmp_path.glob("bronze/contrail_positions/source=*/dt=*/part-*.jsonl"))
+    assert len(positions4.read_text().splitlines()) == 4
+    (aircraft,) = list(tmp_path.glob("bronze/contrail_aircraft/source=*/dt=*/part-*.jsonl"))
     (row, *_rest) = [json.loads(x) for x in aircraft.read_text().splitlines()]
     assert row["icao24"] == "a" and "first_seen" in row
+    assert row["source"] == "adsblol"          # 공급자 구분 컬럼
+    assert "type" in row and "reg" in row      # adsblol 고유 필드 (합집합)
+    assert "origin_country" in row             # opensky 고유 필드 — null로 존재
+    (positions,) = list(tmp_path.glob("bronze/contrail_positions/source=*/dt=*/part-*.jsonl"))
+    assert all(json.loads(x)["source"] == "adsblol"
+               for x in positions.read_text().splitlines())

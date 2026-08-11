@@ -79,6 +79,6 @@ async def test_collect_duration_bounded_lands_zones(tmp_path):
     env = json.loads(landing.read_text())
     assert env["payload"]["MessageType"] == "PositionReport"
 
-    (positions,) = list(tmp_path.glob("bronze/wake_positions/dt=*/part-*.jsonl"))
+    (positions,) = list(tmp_path.glob("bronze/wake_positions/source=*/dt=*/part-*.jsonl"))
     (row,) = [json.loads(x) for x in positions.read_text().splitlines()]
     assert row["mmsi"] == "440123456" and row["sog_kn"] == 12.3

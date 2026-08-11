@@ -54,9 +54,11 @@ async def test_collect_auth_token_cache_and_zones(tmp_path, monkeypatch):
     kinds = {p.parts[-3] for p in tmp_path.glob("landing/opensky/*/dt=*/part-*.jsonl")}
     assert "contrail_global" in kinds and "contrail_region_kr" in kinds
     # bronze는 adsblol과 같은 테이블로 수렴 (제공자 중립)
-    (aircraft,) = list(tmp_path.glob("bronze/contrail_aircraft/dt=*/part-*.jsonl"))
+    (aircraft,) = list(tmp_path.glob("bronze/contrail_aircraft/source=*/dt=*/part-*.jsonl"))
     rows = [json.loads(x) for x in aircraft.read_text().splitlines()]
     assert all(r["origin_country"] == "South Korea" for r in rows)
+    assert all(r["source"] == "opensky" for r in rows)  # 공급자 구분
+    assert all("type" in r and r["type"] is None for r in rows)  # 합집합 — null
 
 
 async def test_collect_anonymous_fallback(tmp_path, monkeypatch):

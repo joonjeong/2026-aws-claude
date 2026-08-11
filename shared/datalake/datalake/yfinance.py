@@ -103,7 +103,7 @@ def fetch_quotes_us() -> list[dict]:
 
 # ── bronze 평탄화 (market_quotes 행) ─────────────────────────────────
 def to_quote_row(q: dict, kind: str, market: str | None, ts: float) -> dict:
-    return {"ts": ts, "kind": kind, "market": market,
+    return {"source": SOURCE, "ts": ts, "kind": kind, "market": market,
             **{k: q.get(k) for k in ("symbol", "name", "price", "change",
                                      "change_pct", "volume")}}
 
@@ -143,7 +143,7 @@ def land(root: Path, kind: str, ts: float, payload, meta: dict) -> int:
     }
     rows = flatten(kind, payload, ts)
     _append(_part(root, "landing", SOURCE, kind, ts=ts), [_jsonl(envelope)])
-    _append(_part(root, "bronze", "market_quotes", ts=ts),
+    _append(_part(root, "bronze", "market_quotes", f"source={SOURCE}", ts=ts),
             [_jsonl(r) for r in rows])
     return len(rows)
 

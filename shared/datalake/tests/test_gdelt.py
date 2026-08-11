@@ -88,7 +88,7 @@ async def test_collect_dedups_across_runs_and_lands(tmp_path):
     assert env["payload"].startswith("1001\t")   # CAMEO 필터 전 전문 보존
     assert "1002\t" in env["payload"]
 
-    (bronze,) = list(tmp_path.glob("bronze/flashpoint_events/dt=*/part-*.jsonl"))
+    (bronze,) = list(tmp_path.glob("bronze/flashpoint_events/source=*/dt=*/part-*.jsonl"))
     rows = [json.loads(x) for x in bronze.read_text().splitlines()]
     assert [r["event_id"] for r in rows] == [1001]  # bronze만 필터 적용
 

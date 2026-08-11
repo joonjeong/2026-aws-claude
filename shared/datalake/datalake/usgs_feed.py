@@ -105,8 +105,9 @@ def land(root: Path, ts: float, payload: dict, meta: dict,
         "source": SOURCE, "kind": "quake", "meta": meta, "payload": payload,
     }
     _append(_part(root, "landing", SOURCE, "quake", ts=ts), [_jsonl(envelope)])
-    _append(_part(root, "bronze", "quake_events", ts=ts),
-            [_jsonl(r) for r in rows])
+    # 모든 bronze 행에 source(공급자) 컬럼 — 테이블 간 균일 계약
+    _append(_part(root, "bronze", "quake_events", f"source={SOURCE}", ts=ts),
+            [_jsonl({"source": SOURCE, **r}) for r in rows])
     return len(rows)
 
 

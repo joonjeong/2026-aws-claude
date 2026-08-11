@@ -109,7 +109,7 @@ def land(root: Path, feed_id: str, ts: float, xml_text: str, meta: dict) -> int:
         "source": feed_id, "kind": "news", "meta": meta, "payload": xml_text,
     }
     _append(_part(root, "landing", feed_id, "news", ts=ts), [_jsonl(envelope)])
-    _append(_part(root, "bronze", "news_articles", ts=ts),
+    _append(_part(root, "bronze", "news_articles", f"source={feed_id}", ts=ts),
             [_jsonl(r) for r in rows])
     return len(rows)
 

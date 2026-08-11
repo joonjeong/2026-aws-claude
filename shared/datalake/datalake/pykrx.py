@@ -79,7 +79,7 @@ async def fetch_quotes() -> list[dict]:
 
 
 def to_quote_row(q: dict, ts: float) -> dict:
-    return {"ts": ts, "kind": "quote_kr", "market": "KR",
+    return {"source": SOURCE, "ts": ts, "kind": "quote_kr", "market": "KR",
             **{k: q.get(k) for k in ("symbol", "name", "price", "change",
                                      "change_pct", "volume")}}
 
@@ -110,7 +110,7 @@ def land(root: Path, ts: float, payload: list[dict], meta: dict) -> int:
     }
     rows = [to_quote_row(q, ts) for q in payload]
     _append(_part(root, "landing", SOURCE, KIND, ts=ts), [_jsonl(envelope)])
-    _append(_part(root, "bronze", "market_quotes", ts=ts),
+    _append(_part(root, "bronze", "market_quotes", f"source={SOURCE}", ts=ts),
             [_jsonl(r) for r in rows])
     return len(rows)
 

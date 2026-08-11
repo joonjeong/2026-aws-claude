@@ -77,8 +77,10 @@ def parse(payload: dict, now: float) -> list[dict]:
 
 
 def to_aircraft_row(f: dict) -> dict:
+    # 공급자 필드 합집합: origin_country(opensky)·type/reg(adsblol) — 없는 쪽 null
     return {"icao24": f["id"], "callsign": f["callsign"],
             "origin_country": f["origin_country"],
+            "type": f["type"], "reg": f["reg"],
             "first_seen": f["ts"], "last_seen": f["ts"]}
 
 
@@ -167,10 +169,11 @@ def land(root: Path, kind: str, ts: float, payload: dict, meta: dict,
     if not bronze:
         return 0  # 전세계 스냅샷은 landing만 (홍수 방지)
     flights = parse(payload, now=ts)
-    _append(_part(root, "bronze", "contrail_aircraft", ts=ts),
-            [_jsonl(to_aircraft_row(f)) for f in flights])
-    _append(_part(root, "bronze", "contrail_positions", ts=ts),
-            [_jsonl(to_position_row(f)) for f in flights])
+    # 모든 bronze 행에 source(공급자) 컬럼 — 같은 테이블에 섞여도 출처 구분
+    _append(_part(root, "bronze", "contrail_aircraft", f"source={SOURCE}", ts=ts),
+            [_jsonl({"source": SOURCE, **to_aircraft_row(f)}) for f in flights])
+    _append(_part(root, "bronze", "contrail_positions", f"source={SOURCE}", ts=ts),
+            [_jsonl({"source": SOURCE, **to_position_row(f)}) for f in flights])
     return len(flights)
 
 

@@ -76,8 +76,10 @@ async def test_collect_selected_feeds_isolation_and_zones(tmp_path):
     landed = {p.parts[-4] for p in tmp_path.glob("landing/*/news/dt=*/part-*.jsonl")}
     assert landed == {"npr", "wapo"}
 
-    (bronze,) = list(tmp_path.glob("bronze/news_articles/dt=*/part-*.jsonl"))
-    rows = [json.loads(x) for x in bronze.read_text().splitlines()]
+    # 매체(공급자)별로 파티션 분리 — source=npr / source=wapo 두 파일
+    parts = sorted(tmp_path.glob("bronze/news_articles/source=*/dt=*/part-*.jsonl"))
+    assert [p.parts[-3] for p in parts] == ["source=npr", "source=wapo"]
+    rows = [json.loads(x) for p in parts for x in p.read_text().splitlines()]
     assert {r["source"] for r in rows} == {"npr", "wapo"}
     assert all("first_seen" in r for r in rows)
 

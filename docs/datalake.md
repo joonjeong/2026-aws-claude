@@ -188,6 +188,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.8 | landing/bronze 분리: 수집 명령이 경량 ETL까지 수행해 bronze(파싱 레코드) 랜딩, silver는 dedup·컬럼화만(구 normalize 분해). 전 명령 `--output` 파라미터 | 사용자 결정: normalize 비대 해소 + 존 의미를 일반적 메달리온과 정합 (landing=원본, bronze=무가공 테이블) |
 | v0.9 | 원천당 자기완결 파일 재작성: core/sources/cli 3분할·model.py·pyarrow 제거, map-filter 펑셔널 파이프라인, silver·bronze 리빌드 CLI 삭제 (silver→gold는 정리된 원천 기반 재설계 예정) | 사용자 결정: 레이어 추상화 대신 파일 하나가 fetch→파싱→랜딩까지 — 내부 상호 import도 테스트로 금지 |
 | v0.10 | CLI를 typer로, 캐스팅·폴백·센티널을 pydantic `Annotated[T, BeforeValidator]` 이디엄으로 — 행 모델이 bronze 스키마 자기문서화 | 사용자 제안: argparse·수동 캐스팅 보일러플레이트 축소 |
+| v0.11 | bronze에 `source=` Hive 파티션 + 전 행 `source` 컬럼 + 공급자 필드 합집합(contrail: origin_country·type·reg) | 사용자 제안: 공급자 구분·공급자 고유 정보 보존 — 물리 분리와 행 자기서술 동시 확보 |
 
 ## 10. 검증 상태 (2026-08-11)
 

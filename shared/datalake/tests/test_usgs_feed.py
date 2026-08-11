@@ -49,6 +49,7 @@ async def test_collect_lands_both_zones(tmp_path):
     assert env["payload"]["features"][0]["id"] == "us100"  # 원본 그대로
     assert env["meta"]["status"] == 200
 
-    (bronze,) = list(tmp_path.glob("bronze/quake_events/dt=*/part-*.jsonl"))
+    (bronze,) = list(tmp_path.glob("bronze/quake_events/source=*/dt=*/part-*.jsonl"))
     (row,) = [json.loads(x) for x in bronze.read_text().splitlines()]
     assert row["id"] == "us100" and row["mag"] == 4.5
+    assert row["source"] == "usgs_feed"  # 균일 계약 — 모든 bronze 행에 source
