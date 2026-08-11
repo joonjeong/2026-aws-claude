@@ -78,3 +78,29 @@ async def test_fetch_source_is_feed_and_kind_is_news():
     uas = list(seen_ua.values())
     assert any(ua.startswith("DataLake/0.1") for ua in uas)
     assert any(ua.startswith("Mozilla/5.0") for ua in uas)  # wapo 오버라이드
+
+
+async def test_fetch_all_isolates_feed_failure():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "bbci" in str(request.url):
+            return httpx.Response(503)
+        return httpx.Response(200, text=_rss(_item()))
+
+    records = await rss.fetch_all(["bbc", "npr"],
+                                  transport=httpx.MockTransport(handler))
+    assert [r.source for r in records] == ["npr"]  # bbc 실패가 npr을 못 죽임
+
+
+async def test_fetch_all_unknown_feed_raises():
+    with pytest.raises(ValueError):
+        await rss.fetch_all(["bbc", "nope"])
+
+
+def test_feeds_file_override(tmp_path, monkeypatch):
+    custom = tmp_path / "feeds.toml"
+    custom.write_text(
+        '[feeds.example]\nname = "Example"\nlang = "en"\n'
+        'rss_url = "https://example.com/rss"\n', encoding="utf-8")
+    monkeypatch.setenv("DATALAKE_RSS_FEEDS", str(custom))
+    feeds = rss._load_feeds()
+    assert set(feeds) == {"example"}  # 목록 파일 교체로 대상 관리

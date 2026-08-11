@@ -1,21 +1,29 @@
-"""rss — 뉴스 매체 상류 15개 (bbc·guardian·…·wapo). 생산 kind: news.
+"""rss — RSS 2.0 표준 상류 (매체 목록 관리형). 생산 kind: news.
 
-이식 원본: hub/backend/app/modules/news/config.py(FEEDS 값 복사),
-collector/rss.py(normalize_entries 이식). import 금지.
+이식 원본: hub/backend/app/modules/news/collector/rss.py(normalize_entries).
+import 금지.
 
-각 매체가 독립 상류이므로 source = 매체 id, 명령도 매체별
-(datalake-bbc, datalake-guardian, …). Record.payload는 RSS XML 원문(str).
-권장 스케줄: 매체당 120s (hub NEWSROOM_POLL_INTERVAL_S).
+RSS는 표준 포맷이라 클라이언트가 매체 무관 제네릭 — 수집 대상은 코드가
+아니라 목록 파일(rss_feeds.toml)이 관리한다. 매체 추가 = 목록에 한 항목.
+env DATALAKE_RSS_FEEDS=<path>로 다른 목록 파일 지정 가능.
+
+봉투는 매체 단위 유지: source = 매체 id, kind = news
+(bronze/bbc/news/… — 명령이 하나여도 상류 구분은 보존된다).
+권장 스케줄: 120s (hub NEWSROOM_POLL_INTERVAL_S).
 """
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import html
 import logging
+import os
 import re
 import time
+import tomllib
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import feedparser
@@ -28,51 +36,20 @@ log = logging.getLogger("datalake.rss")
 TIMEOUT_S = 20.0
 FETCH_LATEST_N = 15
 SUMMARY_MAX_CHARS = 300
+CONCURRENCY = 5  # 매체 병렬 상한 — 서로 다른 호스트라 안전
 
 # 수집 주체를 식별 가능하게 — hub(NewsroomLens/0.1)와 다른 자체 UA (설계 §7)
 DEFAULT_UA = "DataLake/0.1 (+claude-lab; raw archive)"
 
-_BROWSER_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36"
-)
 
-# hub news/config.py SOURCES에서 값 복사 (2026-08-11 기준 15개, KBS 보류)
-FEEDS: dict[str, dict] = {
-    "bbc": {"name": "BBC World", "lang": "en",
-            "rss_url": "http://feeds.bbci.co.uk/news/world/rss.xml"},
-    "guardian": {"name": "The Guardian World", "lang": "en",
-                 "rss_url": "https://www.theguardian.com/world/rss"},
-    "nhk": {"name": "NHK 국제", "lang": "ja",
-            "rss_url": "https://news.web.nhk/n-data/conf/na/rss/cat6.xml"},
-    "yna": {"name": "연합뉴스 국제", "lang": "ko",
-            "rss_url": "https://www.yna.co.kr/rss/international.xml"},
-    "aljazeera": {"name": "Al Jazeera", "lang": "en",
-                  "rss_url": "https://www.aljazeera.com/xml/rss/all.xml"},
-    "hani": {"name": "한겨레", "lang": "ko",
-             "rss_url": "https://www.hani.co.kr/rss/"},
-    "khan": {"name": "경향신문", "lang": "ko",
-             "rss_url": "https://www.khan.co.kr/rss/rssdata/total_news.xml"},
-    "chosun": {"name": "조선일보", "lang": "ko",
-               "rss_url": "https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml"},
-    "sbs": {"name": "SBS 뉴스(정치)", "lang": "ko",
-            "rss_url": "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01"},
-    # mk는 일반 UA 403 봇 차단 — 식별 가능한 커스텀 UA로는 200 (hub와 동일 관찰)
-    "mk": {"name": "매일경제", "lang": "ko",
-           "rss_url": "https://www.mk.co.kr/rss/40300001/"},
-    "hankyung": {"name": "한국경제", "lang": "ko",
-                 "rss_url": "https://www.hankyung.com/feed/economy"},
-    "npr": {"name": "NPR", "lang": "en",
-            "rss_url": "https://feeds.npr.org/1001/rss.xml"},
-    "nyt": {"name": "NYT", "lang": "en",
-            "rss_url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"},
-    "fox": {"name": "Fox News", "lang": "en",
-            "rss_url": "https://feeds.foxnews.com/foxnews/latest"},
-    # WaPo는 비브라우저 UA를 403으로 차단 — 피드 리더 관행대로 브라우저 UA
-    "wapo": {"name": "Washington Post", "lang": "en",
-             "rss_url": "https://feeds.washingtonpost.com/rss/world",
-             "user_agent": _BROWSER_UA},
-}
+def _load_feeds() -> dict[str, dict]:
+    override = os.environ.get("DATALAKE_RSS_FEEDS")
+    path = Path(override) if override else Path(__file__).with_name("rss_feeds.toml")
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    return data["feeds"]
+
+
+FEEDS: dict[str, dict] = _load_feeds()
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
@@ -155,6 +132,29 @@ class RssClient:
                 },
             )
         ]
+
+
+async def fetch_all(feed_ids: list[str] | None = None,
+                    transport: httpx.AsyncBaseTransport | None = None,
+                    concurrency: int = CONCURRENCY) -> list[Record]:
+    """목록의(기본 전체) 매체를 수집 — 매체 단위 실패 격리, 목록 순서 유지."""
+    selected = [f.strip() for f in feed_ids] if feed_ids else list(FEEDS)
+    unknown = [f for f in selected if f not in FEEDS]
+    if unknown:
+        raise ValueError(f"알 수 없는 매체: {unknown} ({sorted(FEEDS)})")
+    sem = asyncio.Semaphore(concurrency)
+
+    async def one(feed_id: str) -> list[Record]:
+        async with sem:
+            try:
+                return await RssClient(feed_id, transport=transport).fetch()
+            except Exception as exc:  # 한 매체 실패가 나머지를 못 죽이게
+                log.warning("[%s] fetch failed: %s: %s",
+                            feed_id, type(exc).__name__, exc)
+                return []
+
+    batches = await asyncio.gather(*(one(f) for f in selected))
+    return [rec for batch in batches for rec in batch]
 
 
 def build(feed_id: str) -> RssClient:

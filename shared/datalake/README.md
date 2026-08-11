@@ -7,12 +7,16 @@ hub의 7개 모듈이 보는 것과 동일한 외부 상류를 **hub와 완전�
 - 설계: `docs/specs/2026-08-11-datalake-design.md`
 - 개요: `docs/datalake.md`
 
-## 봉투 의미론 (v0.5)
+## 봉투 의미론 (v0.5~0.6)
 
 - **`source` = 실제 상류**(usgs_feed, bbc, adsblol, opensky, aisstream, …)
 - **`kind` = 생산되는 데이터셋**(quake, news, contrail_region_kr, wake, …)
 - **명령 = 상류 단위** — `uv run datalake-<source>`. 한 상류가 여러
   데이터셋을 생산할 수 있다 (adsblol → contrail_global + region 4개).
+- **표준 포맷 상류는 목록 관리형** — RSS는 클라이언트가 매체 무관
+  제네릭이라 단일 명령(`datalake-rss`)이 목록 파일
+  (`sources/rss_feeds.toml`, env `DATALAKE_RSS_FEEDS`로 교체)을 순회한다.
+  매체 추가 = 목록에 한 항목. 봉투는 매체 단위 유지(source=매체 id).
 - 같은 데이터셋을 여러 상류가 공급하면(contrail: adsblol/opensky) bronze는
   source로 경로가 갈리고, silver에서 같은 제공자 중립 테이블로 수렴한다.
 
@@ -87,7 +91,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | 명령 (`uv run …`) | 생산 kind | 권장 스케줄 | 활성 조건 |
 |---|---|---|---|
 | `datalake-usgs-feed` | quake | 60s | 항상 |
-| `datalake-bbc` … `datalake-wapo` (매체별 15개) | news | 120s | 항상 |
+| `datalake-rss [--feeds bbc,yna] [--list]` | news (매체 15개, 목록 파일 관리) | 120s | 항상 |
 | `datalake-youtube` | trend | 60s | `YT_API_KEY` |
 | `datalake-adsblol --scope regions\|global` | contrail_region_* / contrail_global | 60s / 600s | 항상 |
 | `datalake-opensky --scope …` | 동일 (adsblol과 수렴) | 동일 | 항상 (인증 권장) |
@@ -100,7 +104,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 
 ```bash
 cd shared/datalake && uv sync        # 준비 (market까지: uv sync --extra market)
-mise run datalake:smoke              # 무키 상류 스모크 (usgs-feed·bbc·gdelt)
+mise run datalake:smoke              # 무키 상류 스모크 (usgs-feed·rss·gdelt)
 mise run datalake:test               # 테스트
 ```
 
@@ -112,6 +116,7 @@ mise run datalake:test               # 테스트
 | `DATALAKE_FLUSH_S` | `10` | aisstream 버퍼 플러시 주기 |
 | `DATALAKE_COMPRESS` | `1` | maintenance의 전일 bronze gzip |
 | `DATALAKE_RAW_RETENTION_DAYS` | `0` (무제한) | maintenance의 bronze 보존기간 |
+| `DATALAKE_RSS_FEEDS` | 패키지 내장 `rss_feeds.toml` | RSS 수집 대상 목록 파일 |
 | `DATALAKE_AISSTREAM_PRESET` | `kr` | aisstream 관심 해역 (kr/taiwan/sea) |
 | `DATALAKE_OPENSKY_CLIENT_ID/SECRET` | — | OpenSky OAuth2 (없으면 익명 감속) |
 | `DATALAKE_MARKET_ACTIVE_US/KR` | `20` | yfinance/pykrx 활성 심볼 수 |

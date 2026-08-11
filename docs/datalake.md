@@ -18,7 +18,7 @@ hub는 서빙이 목적이라 정규화본만 남기고 원본을 버리며 fact
 [외부 소스]                [one-shot CLI (uv run …)]        [데이터레이크 DATALAKE_ROOT]
 
 USGS 지진 피드 ──60s──▶ datalake-usgs-feed ─┐
-RSS 매체 15개 ──120s──▶ datalake-bbc … -wapo ─┤
+RSS 매체 15개 ──120s──▶ datalake-rss (목록 파일) ┤
 YouTube API ────60s──▶ datalake-youtube ─────┤   bronze/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl[.gz]
 adsb.lol ──60s·600s──▶ datalake-adsblol ─────┼─▶ 한 줄 = {"fetched_at","source","kind","meta","payload(원본)"}
 OpenSky ───60s·600s──▶ datalake-opensky ─────┤   source = 상류, kind = 데이터셋 ◀── 진실의 원천
@@ -41,9 +41,11 @@ GDELT export ──900s──▶ datalake-gdelt ───────┘        
 (flashpoint last_url, OpenSky 토큰 캐시). 보조 명령:
 `datalake-maintenance`(일 1회 — 전일 bronze gzip + 보존 프루닝).
 
-**봉투 의미론 (v0.5)**: `source` = 실제 상류(usgs_feed, bbc, adsblol …),
+**봉투 의미론 (v0.5~0.6)**: `source` = 실제 상류(usgs_feed, bbc, adsblol …),
 `kind` = 생산 데이터셋(quake, news, contrail_region_kr …). 명령도 상류
 단위이며 한 상류가 여러 kind를 생산할 수 있다(adsblol → contrail 5개).
+RSS처럼 포맷이 표준이면 명령 하나(`datalake-rss`)가 목록 파일
+(rss_feeds.toml)의 매체들을 순회한다 — 봉투의 source=매체는 유지.
 같은 데이터셋을 여러 상류가 공급하면(contrail: adsblol/opensky) bronze는
 source로 경로가 갈리고 silver의 제공자 중립 테이블로 수렴 —
 (icao24, ts) 키가 겹침을 병합한다.
@@ -78,8 +80,8 @@ shared/datalake/datalake/
 │   youtube.py adsblol.py   (향후 통합 솔루션 포함) 그대로 import 가능
 │   opensky.py aisstream.py
 │   yfinance.py pykrx.py gdelt.py
-├── cli/                ★ 상류별 one-shot 명령 25개 (pyproject scripts)
-│   usgs_feed.py rss.py(매체 15개 main) youtube.py adsblol.py opensky.py
+├── cli/                ★ 상류별 one-shot 명령 11개 (pyproject scripts)
+│   usgs_feed.py rss.py youtube.py adsblol.py opensky.py
 │   aisstream.py yfinance.py pykrx.py gdelt.py normalize.py maintenance.py
 ├── model.py            ★ 정규화 존 데이터 모델의 단일 진실 (pyarrow 스키마)
 ├── core/
@@ -128,7 +130,7 @@ datalake에는 스케줄러·재시도·백오프가 **없다**. 향후 Temporal
 
 ```
 Temporal 스케줄 ──▶ uv run datalake-usgs-feed    (매 60s)      ┐
-               ──▶ uv run datalake-bbc … -wapo   (매체별 120s) │ 종료 코드 계약
+               ──▶ uv run datalake-rss           (매 120s)     │ 종료 코드 계약
                ──▶ uv run datalake-youtube       (매 60s)      │   0 = 성공(0건 포함)
                ──▶ uv run datalake-adsblol --scope regions (60s) / global (600s)
                ──▶ uv run datalake-opensky --scope … (동일)    │   1 = 실패 → 재시도는
@@ -182,6 +184,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.3 | SQLite 제거 · `model.py` 명시적 데이터 모델 · Parquet 정규화 존 · FDW 소비 | 사용자 결정: 파일이 인터페이스, DB는 외부 테이블(FDW)로 연결만 |
 | v0.4 | 메달리온 존 네이밍(bronze/silver/gold 예약) · contrail 다중 제공자(adsb.lol/OpenSky) | 사용자 결정: 메달리온 관례 채택 + 다중 상류 소스 대응 실증 |
 | v0.5 | 봉투 의미 반전: source=상류·kind=데이터셋 · 명령 25개를 상류 단위로 재편(usgs-feed, bbc, adsblol, yfinance, pykrx …) | 사용자 결정: 상류가 수집의 단위 — kind 접두사 편법 제거, 저장 프로토콜(봉투)로 통일 |
+| v0.6 | RSS 단일 명령(`datalake-rss`) + 목록 파일(rss_feeds.toml) 관리. 사설·표준-준(準) 상류는 개별 명령 유지 | 사용자 결정: 표준 포맷은 클라이언트가 제네릭 — 대상 관리는 코드가 아닌 목록으로 |
 
 ## 10. 검증 상태 (2026-08-11)
 

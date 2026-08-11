@@ -19,13 +19,13 @@ run = [
 ]
 
 # 데이터레이크는 상류(source)별 one-shot CLI — 케이던스는 오케스트레이터(Temporal 예정) 소유.
-# 예: uv run datalake-usgs-feed | datalake-bbc … datalake-wapo | datalake-youtube
+# 예: uv run datalake-usgs-feed | datalake-rss [--feeds bbc,yna] | datalake-youtube
 #     | datalake-adsblol --scope regions | datalake-opensky | datalake-aisstream --duration 300
 #     | datalake-yfinance | datalake-pykrx | datalake-gdelt | datalake-normalize | datalake-maintenance
 [tasks."datalake:smoke"]
-description = "데이터레이크 스모크 — 무키 상류(usgs-feed·bbc·gdelt) 1회 수집"
+description = "데이터레이크 스모크 — 무키 상류(usgs-feed·rss·gdelt) 1회 수집"
 dir = "shared/datalake"
-run = ["uv run datalake-usgs-feed", "uv run datalake-bbc", "uv run datalake-gdelt"]
+run = ["uv run datalake-usgs-feed", "uv run datalake-rss --feeds bbc,yna", "uv run datalake-gdelt"]
 
 [tasks."datalake:test"]
 description = "데이터레이크 테스트"
