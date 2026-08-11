@@ -81,7 +81,8 @@ async def test_collect_dedups_across_runs_and_lands(tmp_path):
         return httpx.Response(200, content=csv_zip)
 
     transport = httpx.MockTransport(handler)
-    assert await gdelt.collect(tmp_path, transport=transport) == 0
+    assert await gdelt.collect(tmp_path, keep_landing=True,
+                               transport=transport) == 0
 
     (landing,) = list(tmp_path.glob("landing/gdelt/flashpoint/dt=*/part-*.jsonl"))
     env = json.loads(landing.read_text())
@@ -98,7 +99,7 @@ async def test_collect_dedups_across_runs_and_lands(tmp_path):
     assert len(calls) == n_before + 1  # lastupdate.txt만 재조회
 
     # --force는 상태 무시
-    await gdelt.collect(tmp_path, force=True, transport=transport)
+    await gdelt.collect(tmp_path, force=True, keep_landing=True, transport=transport)
     assert len(landing.read_text().splitlines()) == 2
 
 

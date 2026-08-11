@@ -99,15 +99,17 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
     return root.joinpath(zone, *dirs, f"dt={dt:%Y-%m-%d}", f"part-{dt:%H}.jsonl")
 
 
-def land(root: Path, feed_id: str, ts: float, xml_text: str, meta: dict) -> int:
-    """매체 하나의 봉투 + bronze 행 append. 적재 행 수 반환."""
+def land(root: Path, feed_id: str, ts: float, xml_text: str, meta: dict,
+         keep_landing: bool = False) -> int:
+    """매체 하나의 (옵트인) 봉투 + bronze 행 append. 적재 행 수 반환."""
     rows = [{**a, "first_seen": ts} for a in parse(feed_id, xml_text)]
-    envelope = {
-        "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": feed_id, "kind": "news", "meta": meta, "payload": xml_text,
-    }
-    _append(_part(root, "landing", feed_id, "news", ts=ts), [_jsonl(envelope)])
+    if keep_landing:  # 원본 봉투 보존은 옵트인 (--landing)
+        envelope = {
+            "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": feed_id, "kind": "news", "meta": meta, "payload": xml_text,
+        }
+        _append(_part(root, "landing", feed_id, "news", ts=ts), [_jsonl(envelope)])
     _append(_part(root, "bronze", "news_articles", f"source={feed_id}", ts=ts),
             [_jsonl(r) for r in rows])
     return len(rows)
@@ -132,6 +134,7 @@ async def fetch_feed(client: httpx.AsyncClient, feed_id: str,
 
 
 async def collect(root: Path, feed_ids: list[str] | None = None,
+                  keep_landing: bool = False,
                   transport: httpx.AsyncBaseTransport | None = None) -> int:
     feeds = load_feeds()
     selected = [f.strip() for f in feed_ids] if feed_ids else list(feeds)
@@ -150,7 +153,7 @@ async def collect(root: Path, feed_ids: list[str] | None = None,
         fetched = await asyncio.gather(*(one(client, f) for f in selected))
 
     ts = time.time()
-    total = sum(land(root, fid, ts, xml, meta)
+    total = sum(land(root, fid, ts, xml, meta, keep_landing)
                 for fid, xml, meta in filter(None, fetched))
     ok = sum(1 for r in fetched if r)
     log.info("[rss] 매체 %d/%d · bronze %d행 → %s", ok, len(selected), total, root)
@@ -164,6 +167,8 @@ def cli(
         help="쉼표 구분 매체 id 선택 (기본: 목록 전체)")] = None,
     list_feeds: Annotated[bool, typer.Option(
         "--list", help="수집 대상 목록 출력 후 종료")] = False,
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 봉투를 landing 존에도 보존")] = False,
 ) -> None:
     """RSS 목록 일괄 수집 → landing + bronze."""
     if list_feeds:
@@ -174,7 +179,7 @@ def cli(
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
         asyncio.run(collect(output or DEFAULT_ROOT,
-                            feeds.split(",") if feeds else None))
+                            feeds.split(",") if feeds else None, landing))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
         raise typer.Exit(1)

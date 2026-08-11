@@ -98,13 +98,14 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
 
 
 def land(root: Path, ts: float, payload: dict, meta: dict,
-         rows: list[dict]) -> int:
-    envelope = {
-        "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": SOURCE, "kind": "quake", "meta": meta, "payload": payload,
-    }
-    _append(_part(root, "landing", SOURCE, "quake", ts=ts), [_jsonl(envelope)])
+         rows: list[dict], keep_landing: bool = False) -> int:
+    if keep_landing:  # 원본 봉투 보존은 옵트인 (--landing)
+        envelope = {
+            "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": SOURCE, "kind": "quake", "meta": meta, "payload": payload,
+        }
+        _append(_part(root, "landing", SOURCE, "quake", ts=ts), [_jsonl(envelope)])
     # 공급자는 source= 파티션 경로가 담는다 (행 중복 저장 없음 — Hive 관례)
     _append(_part(root, "bronze", "quake_events", f"source={SOURCE}", ts=ts),
             [_jsonl(r) for r in rows])
@@ -112,7 +113,7 @@ def land(root: Path, ts: float, payload: dict, meta: dict,
 
 
 # ── 수집 ─────────────────────────────────────────────────────────────
-async def collect(root: Path,
+async def collect(root: Path, keep_landing: bool = False,
                   transport: httpx.AsyncBaseTransport | None = None) -> int:
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=TIMEOUT_S, transport=transport) as client:
@@ -121,18 +122,22 @@ async def collect(root: Path,
         payload = resp.json()
     meta = {"url": FEED_URL, "status": resp.status_code,
             "elapsed_ms": int((time.monotonic() - started) * 1000)}
-    n = land(root, time.time(), payload, meta, parse(payload))
+    n = land(root, time.time(), payload, meta, parse(payload), keep_landing)
     log.info("[%s] 봉투 1개 · bronze %d행 → %s", SOURCE, n, root)
     return 0
 
 
-def cli(output: Annotated[Optional[Path], typer.Option(
-        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None) -> None:
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 봉투를 landing 존에도 보존")] = False,
+) -> None:
     """USGS 지진 피드 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        asyncio.run(collect(output or DEFAULT_ROOT))
+        asyncio.run(collect(output or DEFAULT_ROOT, landing))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
         raise typer.Exit(1)

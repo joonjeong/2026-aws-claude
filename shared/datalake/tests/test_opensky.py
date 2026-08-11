@@ -41,7 +41,7 @@ async def test_collect_auth_token_cache_and_zones(tmp_path, monkeypatch):
         lamins.append(request.url.params.get("lamin"))
         return httpx.Response(200, json={"states": [_state()]})
 
-    assert await opensky.collect(tmp_path, "both",
+    assert await opensky.collect(tmp_path, "both", keep_landing=True,
                                  transport=httpx.MockTransport(handler)) == 0
     assert lamins == [None, "30.0", "30.0", "43.0", "25.0"]  # 전세계 무파라미터 + 프리셋 4
     assert len(token_calls) == 1  # 상태 파일 캐시 — 재발급 없음

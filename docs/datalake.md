@@ -189,6 +189,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.9 | 원천당 자기완결 파일 재작성: core/sources/cli 3분할·model.py·pyarrow 제거, map-filter 펑셔널 파이프라인, silver·bronze 리빌드 CLI 삭제 (silver→gold는 정리된 원천 기반 재설계 예정) | 사용자 결정: 레이어 추상화 대신 파일 하나가 fetch→파싱→랜딩까지 — 내부 상호 import도 테스트로 금지 |
 | v0.10 | CLI를 typer로, 캐스팅·폴백·센티널을 pydantic `Annotated[T, BeforeValidator]` 이디엄으로 — 행 모델이 bronze 스키마 자기문서화 | 사용자 제안: argparse·수동 캐스팅 보일러플레이트 축소 |
 | v0.11 | bronze에 `source=` Hive 파티션(행 중복 저장 없음 — hive_partitioning으로 복원) + 공급자 고유 필드 보존(contrail: origin_country·type·reg). 값 없는 키는 생략(null 패딩 없음) | 사용자 제안: 공급자 구분·고유 정보 보존, 데이터 불리기 금지 — 파티션 값·null 어느 쪽도 행에 중복하지 않음 |
+| v0.12 | landing 옵트인화 — 전 수집 CLI에 `--landing` 플래그, 기본은 bronze만 적재 | 사용자 지시: 원본 보존은 명시적 선택으로 |
 
 ## 10. 검증 상태 (2026-08-11)
 

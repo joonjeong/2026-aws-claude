@@ -73,7 +73,7 @@ async def test_pykrx_collect_with_fake_fetcher(tmp_path):
         return [{"symbol": "005930", "name": "삼성전자", "price": 70000.0,
                  "change": 500.0, "change_pct": 0.72, "volume": 1000}]
 
-    assert await pykrx.collect(tmp_path, fetcher=fake) == 0
+    assert await pykrx.collect(tmp_path, keep_landing=True, fetcher=fake) == 0
     (bronze,) = list(tmp_path.glob("bronze/market_quotes/source=*/dt=*/part-*.jsonl"))
     (row,) = [json.loads(x) for x in bronze.read_text().splitlines()]
     assert row["kind"] == "quote_kr" and row["market"] == "KR"

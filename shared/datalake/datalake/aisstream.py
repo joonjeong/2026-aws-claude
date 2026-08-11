@@ -137,17 +137,19 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
     return root.joinpath(zone, *dirs, f"dt={dt:%Y-%m-%d}", f"part-{dt:%H}.jsonl")
 
 
-def flush(root: Path, preset: str, buffer: list[tuple[float, dict]]) -> int:
-    """버퍼의 (ts, 메시지)들을 landing + bronze로 배출. 적재 메시지 수 반환."""
+def flush(root: Path, preset: str, buffer: list[tuple[float, dict]],
+          keep_landing: bool = False) -> int:
+    """버퍼의 (ts, 메시지)들을 (옵트인) landing + bronze로 배출."""
     if not buffer:
         return 0
     ts = buffer[-1][0]
-    _append(_part(root, "landing", SOURCE, "wake", ts=ts),
-            [_jsonl({"fetched_at": datetime.fromtimestamp(t, tz=timezone.utc)
-                     .strftime("%Y-%m-%dT%H:%M:%SZ"),
-                     "source": SOURCE, "kind": "wake",
-                     "meta": {"preset": preset}, "payload": msg})
-             for t, msg in buffer])
+    if keep_landing:  # 원본 봉투 보존은 옵트인 (--landing)
+        _append(_part(root, "landing", SOURCE, "wake", ts=ts),
+                [_jsonl({"fetched_at": datetime.fromtimestamp(t, tz=timezone.utc)
+                         .strftime("%Y-%m-%dT%H:%M:%SZ"),
+                         "source": SOURCE, "kind": "wake",
+                         "meta": {"preset": preset}, "payload": msg})
+                 for t, msg in buffer])
     tables: dict[str, list[str]] = {}
     for t, msg in buffer:
         for table, rows in to_vessel_and_position(msg, t).items():
@@ -167,6 +169,7 @@ async def _default_connect(url: str):
 
 
 async def collect(root: Path, api_key: str, preset: str, duration_s: float,
+                  keep_landing: bool = False,
                   connect=None, flush_s: float = FLUSH_S) -> int:
     connect = connect or _default_connect
     deadline = time.monotonic() + duration_s if duration_s > 0 else None
@@ -205,7 +208,7 @@ async def collect(root: Path, api_key: str, preset: str, duration_s: float,
                     except Exception:  # 메시지 건별 격리
                         log.warning("bad message skipped", exc_info=True)
                 if time.monotonic() - last_flush >= flush_s or raw is None:
-                    total += flush(root, preset, buffer)
+                    total += flush(root, preset, buffer, keep_landing)
                     last_flush = time.monotonic()
         except asyncio.CancelledError:
             raise
@@ -216,7 +219,7 @@ async def collect(root: Path, api_key: str, preset: str, duration_s: float,
                 await ws.close()
             except Exception:  # noqa: BLE001 — 이미 죽은 소켓
                 pass
-    total += flush(root, preset, buffer)  # 종료 시 잔여 배출
+    total += flush(root, preset, buffer, keep_landing)  # 종료 시 잔여 배출
     log.info("[%s] 메시지 %d개 → %s", SOURCE, total, root)
     return 0
 
@@ -233,6 +236,8 @@ def cli(
     duration: Annotated[float, typer.Option(
         help="구독 유지 시간(초). 0 = Ctrl-C까지")] = 0.0,
     preset: Annotated[Preset, typer.Option(help="관심 해역")] = Preset(DEFAULT_PRESET),
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 봉투를 landing 존에도 보존")] = False,
 ) -> None:
     """AISStream 스트림 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
@@ -242,7 +247,8 @@ def cli(
         log.error("aisstream 비활성: DATALAKE_AIS_KEY 미설정 (전용 키 필요)")
         raise typer.Exit(2)
     try:
-        asyncio.run(collect(output or DEFAULT_ROOT, api_key, preset.value, duration))
+        asyncio.run(collect(output or DEFAULT_ROOT, api_key, preset.value,
+                            duration, landing))
     except KeyboardInterrupt:
         pass
     except Exception as exc:

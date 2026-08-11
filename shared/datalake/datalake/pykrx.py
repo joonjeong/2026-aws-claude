@@ -102,36 +102,42 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
     return root.joinpath(zone, *dirs, f"dt={dt:%Y-%m-%d}", f"part-{dt:%H}.jsonl")
 
 
-def land(root: Path, ts: float, payload: list[dict], meta: dict) -> int:
-    envelope = {
-        "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": SOURCE, "kind": KIND, "meta": meta, "payload": payload,
-    }
+def land(root: Path, ts: float, payload: list[dict], meta: dict,
+         keep_landing: bool = False) -> int:
     rows = [to_quote_row(q, ts) for q in payload]
-    _append(_part(root, "landing", SOURCE, KIND, ts=ts), [_jsonl(envelope)])
+    if keep_landing:  # 원본 봉투 보존은 옵트인 (--landing)
+        envelope = {
+            "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": SOURCE, "kind": KIND, "meta": meta, "payload": payload,
+        }
+        _append(_part(root, "landing", SOURCE, KIND, ts=ts), [_jsonl(envelope)])
     _append(_part(root, "bronze", "market_quotes", f"source={SOURCE}", ts=ts),
             [_jsonl(r) for r in rows])
     return len(rows)
 
 
 # ── 수집 ─────────────────────────────────────────────────────────────
-async def collect(root: Path, fetcher=None) -> int:
+async def collect(root: Path, keep_landing: bool = False, fetcher=None) -> int:
     started = time.monotonic()
     payload = await (fetcher() if fetcher is not None else fetch_quotes())
     meta = {"elapsed_ms": int((time.monotonic() - started) * 1000)}
-    n = land(root, time.time(), payload, meta)
+    n = land(root, time.time(), payload, meta, keep_landing)
     log.info("[%s] bronze %d행 → %s", SOURCE, n, root)
     return 0
 
 
-def cli(output: Annotated[Optional[Path], typer.Option(
-        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None) -> None:
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 봉투를 landing 존에도 보존")] = False,
+) -> None:
     """KRX 시세 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        asyncio.run(collect(output or DEFAULT_ROOT))
+        asyncio.run(collect(output or DEFAULT_ROOT, landing))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
         raise typer.Exit(1)

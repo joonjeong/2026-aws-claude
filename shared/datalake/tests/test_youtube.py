@@ -30,7 +30,7 @@ async def test_collect_key_never_leaks_and_lands(tmp_path):
         assert request.url.params["chart"] == "mostPopular"
         return httpx.Response(200, json={"items": [_item()]})
 
-    assert await youtube.collect(tmp_path, "SECRETKEY",
+    assert await youtube.collect(tmp_path, "SECRETKEY", keep_landing=True,
                                  transport=httpx.MockTransport(handler)) == 0
 
     (landing,) = list(tmp_path.glob("landing/youtube/trend/dt=*/part-*.jsonl"))

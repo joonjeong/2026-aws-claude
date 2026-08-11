@@ -74,6 +74,7 @@ async def test_collect_duration_bounded_lands_zones(tmp_path):
         return ws
 
     assert await aisstream.collect(tmp_path, "K", "kr", duration_s=0.3,
+                                   keep_landing=True,
                                    connect=connect, flush_s=0.05) == 0
     assert json.loads(ws.sent[0])["APIKey"] == "K"  # 구독 프레임 전송
 

@@ -95,15 +95,17 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
     return root.joinpath(zone, *dirs, f"dt={dt:%Y-%m-%d}", f"part-{dt:%H}.jsonl")
 
 
-def land(root: Path, ts: float, payload: dict, meta: dict) -> int:
+def land(root: Path, ts: float, payload: dict, meta: dict,
+         keep_landing: bool = False) -> int:
     items = parse(payload)
     bucket_ts = float(int(ts // BUCKET_S) * BUCKET_S)
-    envelope = {
-        "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": SOURCE, "kind": "trend", "meta": meta, "payload": payload,
-    }
-    _append(_part(root, "landing", SOURCE, "trend", ts=ts), [_jsonl(envelope)])
+    if keep_landing:  # 원본 봉투 보존은 옵트인 (--landing)
+        envelope = {
+            "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": SOURCE, "kind": "trend", "meta": meta, "payload": payload,
+        }
+        _append(_part(root, "landing", SOURCE, "trend", ts=ts), [_jsonl(envelope)])
     _append(_part(root, "bronze", "trend_videos", f"source={SOURCE}", ts=ts),
             [_jsonl({**{k: i[k] for k in ("video_id", "title", "channel",
                                           "category_id", "thumbnail",
@@ -117,7 +119,7 @@ def land(root: Path, ts: float, payload: dict, meta: dict) -> int:
 
 
 # ── 수집 ─────────────────────────────────────────────────────────────
-async def collect(root: Path, api_key: str,
+async def collect(root: Path, api_key: str, keep_landing: bool = False,
                   transport: httpx.AsyncBaseTransport | None = None) -> int:
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=TIMEOUT_S, transport=transport) as client:
@@ -131,13 +133,17 @@ async def collect(root: Path, api_key: str,
         raise RuntimeError(f"youtube upstream status {resp.status_code}")
     meta = {"region": REGION_CODE, "status": resp.status_code,
             "elapsed_ms": int((time.monotonic() - started) * 1000)}
-    n = land(root, time.time(), resp.json(), meta)
+    n = land(root, time.time(), resp.json(), meta, keep_landing)
     log.info("[%s] 봉투 1개 · 영상 %d개 → %s", SOURCE, n, root)
     return 0
 
 
-def cli(output: Annotated[Optional[Path], typer.Option(
-        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None) -> None:
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 봉투를 landing 존에도 보존")] = False,
+) -> None:
     """YouTube 인기 동영상(KR) 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -146,7 +152,7 @@ def cli(output: Annotated[Optional[Path], typer.Option(
         log.error("youtube 비활성: YT_API_KEY 미설정")
         raise typer.Exit(2)
     try:
-        asyncio.run(collect(output or DEFAULT_ROOT, api_key))
+        asyncio.run(collect(output or DEFAULT_ROOT, api_key, landing))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
         raise typer.Exit(1)

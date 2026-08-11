@@ -41,7 +41,8 @@ async def test_collect_lands_both_zones(tmp_path):
         return httpx.Response(200, json={"features": [_feature()]})
 
     assert await usgs_feed.collect(
-        tmp_path, transport=httpx.MockTransport(handler)) == 0
+        tmp_path, keep_landing=True,
+        transport=httpx.MockTransport(handler)) == 0
 
     (landing,) = list(tmp_path.glob("landing/usgs_feed/quake/dt=*/part-*.jsonl"))
     env = json.loads(landing.read_text())
@@ -54,3 +55,13 @@ async def test_collect_lands_both_zones(tmp_path):
     assert row["id"] == "us100" and row["mag"] == 4.5
     assert "source" not in row  # 공급자는 source= 파티션 경로가 담당
     assert bronze.parts[-3] == "source=usgs_feed"
+
+
+async def test_collect_default_is_bronze_only(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"features": [_feature()]})
+
+    assert await usgs_feed.collect(
+        tmp_path, transport=httpx.MockTransport(handler)) == 0
+    assert not (tmp_path / "landing").exists()  # 기본은 bronze만
+    assert (tmp_path / "bronze").exists()

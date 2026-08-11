@@ -68,7 +68,7 @@ async def test_collect_selected_feeds_isolation_and_zones(tmp_path):
             return httpx.Response(503)  # bbc 실패 → 격리
         return httpx.Response(200, text=_rss(_item()))
 
-    assert await rss.collect(tmp_path, ["bbc", "npr", "wapo"],
+    assert await rss.collect(tmp_path, ["bbc", "npr", "wapo"], keep_landing=True,
                              transport=httpx.MockTransport(handler)) == 0
 
     # bbc 실패는 격리 — npr·wapo만 랜딩

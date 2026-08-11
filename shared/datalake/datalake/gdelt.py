@@ -158,22 +158,25 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
     return root.joinpath(zone, *dirs, f"dt={dt:%Y-%m-%d}", f"part-{dt:%H}.jsonl")
 
 
-def land(root: Path, ts: float, csv_text: str, meta: dict) -> int:
-    envelope = {
-        "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": SOURCE, "kind": "flashpoint", "meta": meta,
-        "payload": csv_text,  # CAMEO 필터 전 전문 보존
-    }
+def land(root: Path, ts: float, csv_text: str, meta: dict,
+         keep_landing: bool = False) -> int:
     rows = parse(csv_text)
-    _append(_part(root, "landing", SOURCE, "flashpoint", ts=ts), [_jsonl(envelope)])
+    if keep_landing:  # CAMEO 필터 전 전문 보존은 옵트인 (--landing)
+        envelope = {
+            "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": SOURCE, "kind": "flashpoint", "meta": meta,
+            "payload": csv_text,
+        }
+        _append(_part(root, "landing", SOURCE, "flashpoint", ts=ts),
+                [_jsonl(envelope)])
     _append(_part(root, "bronze", "flashpoint_events", f"source={SOURCE}", ts=ts),
             [_jsonl(r) for r in rows])
     return len(rows)
 
 
 # ── 수집 (파일 단위 중복은 상태 파일로 스킵) ─────────────────────────
-async def collect(root: Path, force: bool = False,
+async def collect(root: Path, force: bool = False, keep_landing: bool = False,
                   transport: httpx.AsyncBaseTransport | None = None) -> int:
     state_path = root / "_state" / "gdelt_last_url"
     started = time.monotonic()
@@ -195,7 +198,7 @@ async def collect(root: Path, force: bool = False,
     ts = time.time()
     meta = {"url": url, "status": 200, "lines": len(csv_text.splitlines()),
             "elapsed_ms": int((time.monotonic() - started) * 1000)}
-    n = land(root, ts, csv_text, meta)
+    n = land(root, ts, csv_text, meta, keep_landing)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(url, encoding="utf-8")  # 성공 후에만 갱신
     log.info("[%s] 봉투 1개 · 이벤트 %d행 → %s", SOURCE, n, root)
@@ -207,12 +210,14 @@ def cli(
         help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
     force: Annotated[bool, typer.Option(
         "--force", help="상태 파일 무시하고 최신 파일 재수집")] = False,
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 CSV 전문을 landing 존에도 보존")] = False,
 ) -> None:
     """GDELT 15분 export 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        asyncio.run(collect(output or DEFAULT_ROOT, force))
+        asyncio.run(collect(output or DEFAULT_ROOT, force, landing))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
         raise typer.Exit(1)

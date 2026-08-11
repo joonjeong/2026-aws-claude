@@ -121,16 +121,17 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
 
 
 def land(root: Path, kind: str, ts: float, payload: dict, meta: dict,
-         bronze: bool) -> int:
+         bronze: bool, keep_landing: bool = False) -> int:
     """kind 하나의 봉투 + (지역 스냅샷이면) bronze 행 append."""
-    envelope = {
-        "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": SOURCE, "kind": kind, "meta": meta, "payload": payload,
-    }
-    _append(_part(root, "landing", SOURCE, kind, ts=ts), [_jsonl(envelope)])
+    if keep_landing:  # 원본 봉투 보존은 옵트인 (--landing)
+        envelope = {
+            "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": SOURCE, "kind": kind, "meta": meta, "payload": payload,
+        }
+        _append(_part(root, "landing", SOURCE, kind, ts=ts), [_jsonl(envelope)])
     if not bronze:
-        return 0  # 전세계 스냅샷은 landing만 (홍수 방지)
+        return 0  # 전세계 스냅샷은 landing 전용 (bronze 홍수 방지)
     flights = parse(payload, now=ts)
     # 공급자는 source= 파티션 경로가 담는다 (행 중복 저장 없음 — Hive 관례)
     _append(_part(root, "bronze", "contrail_aircraft", f"source={SOURCE}", ts=ts),
@@ -150,20 +151,24 @@ async def _fetch(client: httpx.AsyncClient, bbox: tuple) -> tuple[dict, dict]:
         "elapsed_ms": int((time.monotonic() - started) * 1000)}
 
 
-async def collect(root: Path, scope: str,
+async def collect(root: Path, scope: str, keep_landing: bool = False,
                   transport: httpx.AsyncBaseTransport | None = None) -> int:
     total = 0
     async with httpx.AsyncClient(timeout=TIMEOUT_S, transport=transport,
                                  headers={"User-Agent": USER_AGENT}) as client:
+        if scope in ("global", "both") and not keep_landing:
+            log.warning("전세계 스냅샷은 landing 전용 — --landing 없이는 저장되지 않음")
         if scope in ("global", "both"):
             payload, meta = await _fetch(client, GLOBAL_BBOX)
-            land(root, "contrail_global", time.time(), payload, meta, bronze=False)
+            land(root, "contrail_global", time.time(), payload, meta,
+                 bronze=False, keep_landing=keep_landing)
         if scope in ("regions", "both"):
             for preset, bbox in PRESETS.items():
                 await asyncio.sleep(REGION_SPACING_S)  # 상류 빈도 제한 예의
                 payload, meta = await _fetch(client, bbox)
                 total += land(root, f"contrail_region_{preset}", time.time(),
-                              payload, meta, bronze=True)
+                              payload, meta, bronze=True,
+                              keep_landing=keep_landing)
     log.info("[%s] scope=%s · bronze %d행 → %s", SOURCE, scope, total, root)
     return 0
 
@@ -178,12 +183,14 @@ def cli(
     output: Annotated[Optional[Path], typer.Option(
         help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
     scope: Annotated[Scope, typer.Option(help="수집 범위")] = Scope.both,
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 봉투를 landing 존에도 보존")] = False,
 ) -> None:
     """항공 트래픽 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        asyncio.run(collect(output or DEFAULT_ROOT, scope.value))
+        asyncio.run(collect(output or DEFAULT_ROOT, scope.value, landing))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
         raise typer.Exit(1)

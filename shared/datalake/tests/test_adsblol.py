@@ -40,7 +40,7 @@ async def test_collect_zones(tmp_path, monkeypatch):
         assert request.headers["user-agent"].startswith("DataLake/0.1")
         return httpx.Response(200, json={"ac": [{"hex": "a", "lat": 1, "lon": 2}]})
 
-    assert await adsblol.collect(tmp_path, "both",
+    assert await adsblol.collect(tmp_path, "both", keep_landing=True,
                                  transport=httpx.MockTransport(handler)) == 0
     assert "box=-90.0,90.0,-180.0,180.0&jv2" in calls[0]  # 전세계 먼저
 

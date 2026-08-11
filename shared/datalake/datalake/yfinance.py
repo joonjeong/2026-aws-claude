@@ -136,14 +136,16 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
     return root.joinpath(zone, *dirs, f"dt={dt:%Y-%m-%d}", f"part-{dt:%H}.jsonl")
 
 
-def land(root: Path, kind: str, ts: float, payload, meta: dict) -> int:
-    envelope = {
-        "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
-        .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": SOURCE, "kind": kind, "meta": meta, "payload": payload,
-    }
+def land(root: Path, kind: str, ts: float, payload, meta: dict,
+         keep_landing: bool = False) -> int:
     rows = flatten(kind, payload, ts)
-    _append(_part(root, "landing", SOURCE, kind, ts=ts), [_jsonl(envelope)])
+    if keep_landing:  # 원본 봉투 보존은 옵트인 (--landing)
+        envelope = {
+            "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "source": SOURCE, "kind": kind, "meta": meta, "payload": payload,
+        }
+        _append(_part(root, "landing", SOURCE, kind, ts=ts), [_jsonl(envelope)])
     _append(_part(root, "bronze", "market_quotes", f"source={SOURCE}", ts=ts),
             [_jsonl(r) for r in rows])
     return len(rows)
@@ -151,6 +153,7 @@ def land(root: Path, kind: str, ts: float, payload, meta: dict) -> int:
 
 # ── 수집 ─────────────────────────────────────────────────────────────
 async def collect(root: Path, kinds: list[str] | None = None,
+                  keep_landing: bool = False,
                   fetchers: dict | None = None) -> int:
     fetchers = fetchers if fetchers is not None else {
         "market_overview": fetch_overview,
@@ -168,7 +171,7 @@ async def collect(root: Path, kinds: list[str] | None = None,
             log.warning("%s fetch failed: %s: %s", kind, type(exc).__name__, exc)
             continue
         meta = {"elapsed_ms": int((time.monotonic() - started) * 1000)}
-        total += land(root, kind, time.time(), payload, meta)
+        total += land(root, kind, time.time(), payload, meta, keep_landing)
     log.info("[%s] bronze %d행 → %s", SOURCE, total, root)
     return 0
 
@@ -178,13 +181,15 @@ def cli(
         help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
     kinds: Annotated[Optional[str], typer.Option(
         help="쉼표 구분 선택 (기본 전체: market_overview,market_quotes_us)")] = None,
+    landing: Annotated[bool, typer.Option(
+        "--landing", help="원본 봉투를 landing 존에도 보존")] = False,
 ) -> None:
     """Yahoo Finance 시세 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
         asyncio.run(collect(output or DEFAULT_ROOT,
-                            kinds.split(",") if kinds else None))
+                            kinds.split(",") if kinds else None, landing))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
         raise typer.Exit(1)

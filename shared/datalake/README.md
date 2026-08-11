@@ -31,10 +31,10 @@ datalake/
 **랜딩**(append) → **collect**(IO) → **cli/main**(typer — 타입 힌트가 곧 옵션).
 
 ```
-uv run datalake-<원천> [--output <root>]
+uv run datalake-<원천> [--output <root>] [--landing]
    │ fetch 1회
-   ├─▶ landing/<source>/<kind>/dt=…/part-HH.jsonl              원본 봉투 (불변, 진실의 원천)
-   └─▶ bronze/<table>/source=<공급자>/dt=…/part-HH.jsonl        파싱·타입화 행 append (중복 허용)
+   ├─▶ (--landing 시) landing/<source>/<kind>/dt=…/part-HH.jsonl   원본 봉투 보존 (옵트인)
+   └─▶ bronze/<table>/source=<공급자>/dt=…/part-HH.jsonl           파싱·타입화 행 append (기본)
 ```
 
 - **공급자는 `source=` 파티션 경로가 단독 기록** (Hive 관례 — 행에 중복
@@ -47,7 +47,10 @@ uv run datalake-<원천> [--output <root>]
 - **봉투 의미론**: `source`=원천(usgs_feed, bbc, adsblol …),
   `kind`=데이터셋(quake, news, contrail_region_kr …). 한 원천이 여러
   kind를 생산할 수 있다 (adsblol → contrail 5개).
-- **존 의미**: landing=원본 바이트 · bronze=무가공 파싱 레코드(1:1, append).
+- **존 의미**: landing=원본 바이트(**--landing 옵트인** — 재처리·감사가
+  필요한 운영에서 켠다. adsblol/opensky의 전세계 스냅샷은 landing 전용이라
+  --landing 없으면 저장되지 않음(경고 출력)) ·
+  bronze=무가공 파싱 레코드(1:1, append — 기본 산출물).
   **bronze→silver→gold는 정리된 원천을 기반으로 추후 재설계** — 현재
   리빌드성 명령(구 datalake-silver/bronze)은 두지 않는다.
 - 스케줄링·재시도 없음 — 외부 스케줄러 소유.
