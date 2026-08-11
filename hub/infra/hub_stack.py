@@ -114,9 +114,10 @@ class HubStack(Stack):
             # 검증 (임의 문자열이 빌드 컨테이너에서 명령으로 실행되는 것 차단)
             apps = (
                 self.node.try_get_context("apps")
-                or "quake,news,trend,market,contrail,wake"
+                or "quake,news,trend,market,contrail,wake,flashpoint"
             )
-            allowed = {"quake", "news", "trend", "market", "contrail", "wake"}
+            allowed = {"quake", "news", "trend", "market", "contrail", "wake",
+                       "flashpoint"}
             parts = [p.strip() for p in apps.split(",") if p.strip()]
             if not parts or not set(parts) <= allowed:
                 raise ValueError(
@@ -219,6 +220,15 @@ class HubStack(Stack):
                 "(WAKE_AIS_KEY=... cdk deploy 로 주입)"
             )
 
+        # YT_API_KEY — trend 모듈 YouTube 수집기 키. WAKE_AIS_KEY와 동일 패턴:
+        # 미설정이면 수집만 스킵되고 앱은 정상(템플릿 평문 노출 트레이드오프도 동일).
+        yt_api_key = (os.environ.get("YT_API_KEY") or "").strip()
+        if not yt_api_key:
+            cdk.Annotations.of(self).add_warning(
+                "YT_API_KEY 미설정 — trend YouTube 수집기가 비활성 상태로 배포된다 "
+                "(YT_API_KEY=... cdk deploy 로 주입)"
+            )
+
         task_def.add_container(
             "web",
             image=container_image,
@@ -229,6 +239,7 @@ class HubStack(Stack):
             environment={
                 "PORT": str(CONTAINER_PORT),
                 **({"WAKE_AIS_KEY": wake_ais_key} if wake_ais_key else {}),
+                **({"YT_API_KEY": yt_api_key} if yt_api_key else {}),
             },
             secrets={
                 "AWS_BEARER_TOKEN_BEDROCK": ecs.Secret.from_secrets_manager(

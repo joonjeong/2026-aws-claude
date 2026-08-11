@@ -26,8 +26,15 @@ export function useModules() {
 
   const backendEnabled = new Set(modules.data?.modules.map((m) => m.id) ?? []);
 
+  /** 낙관적 판정 — 모듈 목록 로딩 중엔 true (사이드바 깜빡임 방지용). */
   function isEnabled(id: string): boolean {
     return modules.isPending || backendEnabled.has(id);
+  }
+
+  /** 엄격 판정 — 목록이 확정된 뒤에만 true. 대시보드 패널의 fetch 게이트용
+   *  (낙관 판정을 쓰면 비활성 모듈에 404 재시도 버스트가 생긴다). */
+  function isEnabledStrict(id: string): boolean {
+    return backendEnabled.has(id);
   }
 
   function statusLine(id: string): string {
@@ -40,5 +47,8 @@ export function useModules() {
     return parts.slice(0, 3).join(" · ") || "상태 정보 없음";
   }
 
-  return { isEnabled, statusLine };
+  /** 모듈 목록 1차 로딩 완료 여부 — false 동안 대시보드는 로딩 표시. */
+  const ready = !modules.isPending;
+
+  return { isEnabled, isEnabledStrict, ready, statusLine };
 }

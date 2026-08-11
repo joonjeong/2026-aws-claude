@@ -1,8 +1,8 @@
-/** Shared abort-able SSE reader for the market AI streams.
+/** Shared abort-able SSE reader for the AI streams (market 앱 + 셸 대시보드).
  *
  * Deliberately NOT react-query: SSE deltas are incremental, react-query
- * caches completed results. Used by AIPanel (stock analysis) and NewsPanel
- * (article analysis) — same frame parsing as the original AIPanel reader.
+ * caches completed results. Used by market AIPanel/NewsPanel and the home
+ * dashboard AI summary — same frame parsing as the original AIPanel reader.
  */
 export interface SseHandlers {
   onPhase?: (phase: string) => void;

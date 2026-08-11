@@ -128,6 +128,20 @@ async def market_overview(response: Response) -> dict[str, Any]:
     return {**data, "errors": errors}
 
 
+@router.get("/indices/spark")
+async def indices_spark(response: Response) -> dict[str, Any]:
+    """1-month closes for the 5 indices (home dashboard sparklines).
+    Cached under one key; TTL follows the 1m chart tier."""
+    try:
+        data, hit = await _cached("spark:indices", config.CHART_TTL["1m"],
+                                  charts.fetch_index_spark)
+    except Exception as exc:  # noqa: BLE001
+        log.error("indices spark fetch failed: %r", exc)
+        raise HTTPException(status_code=502, detail="upstream data source failed")
+    _mark(response, hit)
+    return data
+
+
 @router.get("/quotes")
 async def market_quotes(response: Response) -> dict[str, Any]:
     errors: dict[str, str | None] = {"us": None, "kr": None}
@@ -242,6 +256,28 @@ async def ai_analyze(symbol: str) -> StreamingResponse:
     detail, _ = await _detail_cached(symbol)
     return StreamingResponse(
         ai.analyze_stream(detail),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/ai/market")
+async def ai_market_summary() -> StreamingResponse:
+    """전체 시황 요약 SSE — 지수·지표·양시장 시세를 모아 5분 버킷으로 요약.
+    같은 버킷의 재요청은 ai 서비스가 캐시를 즉시 final로 재생한다."""
+    if not ai.token_present():
+        # 503 BEFORE any streaming — 대시보드 패널이 비활성 상태를 표시
+        raise HTTPException(status_code=503, detail="AWS_BEARER_TOKEN_BEDROCK not set")
+    try:
+        # 워밍 폴러와 같은 캐시 키를 지나므로 대부분 딕셔너리 조회로 끝난다
+        overview, _ = await _cached("overview", hours.overview_ttl(), us.fetch_overview)
+        us_rows, _ = await _cached("quotes:us", hours.quote_ttl("US"), us.fetch_us_quotes)
+        kr_rows, _ = await _cached("quotes:kr", hours.quote_ttl("KR"), kr.fetch_kr_quotes)
+    except Exception as exc:  # noqa: BLE001
+        log.error("ai market summary inputs failed: %r", exc)
+        raise HTTPException(status_code=502, detail="upstream data source failed")
+    return StreamingResponse(
+        ai.market_summary_stream(overview, us_rows, kr_rows),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

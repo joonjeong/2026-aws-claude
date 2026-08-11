@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchNews, NewsItem } from "../api/client";
-import { streamSse } from "../api/sse";
-import Markdown from "./md";
+import { streamSse } from "../../../lib/sse";
+import Markdown from "../../../lib/md";
 
 type Phase = "idle" | "fetching" | "analyzing" | "done" | "disabled" | "error";
 

@@ -2,7 +2,7 @@
 live in each module's own config.py."""
 from labkit.config import env_str
 
-ALL_MODULES = ["quake", "news", "trend", "market", "contrail", "wake"]
+ALL_MODULES = ["quake", "news", "trend", "market", "contrail", "wake", "flashpoint"]
 
 ENABLED_MODULES = [
     m.strip()
