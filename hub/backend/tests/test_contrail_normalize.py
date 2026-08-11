@@ -17,6 +17,7 @@ def test_normalize_good_state():
         "id": "abc123", "callsign": "KAL123", "origin_country": "Republic of Korea",
         "ts": 1700000000.0, "lon": 127.1, "lat": 37.5, "alt_m": 10058.4,
         "on_ground": False, "velocity_ms": 245.8, "track_deg": 88.2,
+        "type": None, "reg": None,  # OpenSky에는 기종·등록부호 없음 — dict 형태 통일
     }]
 
 

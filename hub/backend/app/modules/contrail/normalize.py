@@ -30,6 +30,7 @@ def normalize_states(payload: dict, now: float) -> list[dict]:
                 "on_ground": bool(s[8]),
                 "velocity_ms": None if s[9] is None else float(s[9]),
                 "track_deg": None if s[10] is None else float(s[10]),
+                "type": None, "reg": None,  # OpenSky에는 기종·등록부호 없음
             })
         except Exception:  # 한 건의 비정상이 나머지를 죽이지 않음
             logger.warning("skipping malformed state entry", exc_info=True)
@@ -67,6 +68,8 @@ def normalize_readsb(payload: dict, now: float) -> list[dict]:
                 "on_ground": on_ground,
                 "velocity_ms": None if gs is None else float(gs) * KT_TO_MS,
                 "track_deg": None if track is None else float(track),
+                "type": a.get("t") or None,
+                "reg": a.get("r") or None,
             })
         except Exception:  # 한 건의 비정상이 나머지를 죽이지 않음
             logger.warning("skipping malformed ac entry", exc_info=True)

@@ -21,7 +21,7 @@ def build_user_text(global_stats: dict, region_stats: dict,
     lines = [
         "[전 세계 스냅샷]",
         f"- 추적 항공기: {global_stats['count']}대 (공중 {global_stats['airborne']}대)",
-        f"- 최다 등록 국가: {global_stats['top_country'] or 'unknown'}",
+        f"- 최다 기종: {global_stats['top_type'] or 'unknown'}",
         "",
         f"[관심지역: {preset_label} — 최근 6시간]",
         f"- 관측 항공기: {region_stats['count']}대",
@@ -30,7 +30,7 @@ def build_user_text(global_stats: dict, region_stats: dict,
     ]
     for f in notable:
         lines.append(
-            f"- {f.get('callsign') or f['id']} | {f.get('origin_country') or '?'}"
+            f"- {f.get('callsign') or f['id']} | {f.get('type') or '?'}"
             f" | 고도 {round((f.get('alt_m') or 0))}m"
             f" | {round((f.get('velocity_ms') or 0) * 3.6)}km/h"
         )

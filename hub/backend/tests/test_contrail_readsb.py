@@ -33,6 +33,18 @@ def test_normalize_good_aircraft_converts_units():
     assert f["on_ground"] is False
 
 
+def test_extracts_aircraft_type_and_registration():
+    f = normalize_readsb({"ac": [GOOD]}, now=0.0)[0]
+    assert f["type"] == "A359"
+    assert f["reg"] == "HL7771"
+
+
+def test_missing_type_and_registration_are_none():
+    f = normalize_readsb({"ac": [ON_GROUND]}, now=100.0)[0]
+    assert f["type"] is None
+    assert f["reg"] is None
+
+
 def test_ground_special_value():
     f = normalize_readsb({"ac": [ON_GROUND]}, now=100.0)[0]
     assert f["on_ground"] is True

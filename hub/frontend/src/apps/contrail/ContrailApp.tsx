@@ -12,7 +12,8 @@ interface Flight {
   lon: number;
   lat: number;
   callsign?: string | null;
-  origin_country?: string | null;
+  type?: string | null;   // 기종 코드 (adsb.lol `t`, 예: A359 — opensky 롤백 시 null)
+  reg?: string | null;    // 등록부호 (adsb.lol `r`, 예: HL7771)
   alt_m: number | null;
   velocity_ms: number | null;
   track_deg: number | null;
@@ -24,7 +25,7 @@ interface Preset { id: string; label: string; bbox: BBox }
 
 interface GlobalResponse {
   flights?: Flight[];
-  stats?: { count: number; airborne: number; top_country: string | null; last_fetch: number | null };
+  stats?: { count: number; airborne: number; top_type: string | null; last_fetch: number | null };
 }
 interface RegionResponse {
   flights?: Flight[];
@@ -54,12 +55,10 @@ export default function ContrailApp() {
   const loadWorld = useCallback(async () => {
     try { setWorld(await (await fetch(`${API}/global`)).json()); } catch { /* retry next tick */ }
   }, []);
-  const loadRegion = useCallback(async () => {
+  // 모든 프리셋이 서버에서 상시 수집·저장되므로 전환은 조회 파라미터만 바꾼다
+  const loadRegion = useCallback(async (id: string) => {
     try {
-      const r = (await (await fetch(`${API}/region`)).json()) as RegionResponse;
-      setRegion(r);
-      const preset = r.preset;
-      if (preset) setView((v) => (v === "world" ? v : preset));
+      setRegion(await (await fetch(`${API}/region?preset=${encodeURIComponent(id)}`)).json());
     } catch { /* retry next tick */ }
   }, []);
 
@@ -69,26 +68,24 @@ export default function ContrailApp() {
 
   useEffect(() => {
     loadWorld();
-    loadRegion();
     const tw = setInterval(loadWorld, WORLD_REFRESH_MS);
-    const tr = setInterval(loadRegion, REGION_REFRESH_MS);
-    return () => { clearInterval(tw); clearInterval(tr); };
-  }, [loadWorld, loadRegion]);
+    return () => clearInterval(tw);
+  }, [loadWorld]);
 
-  const switchView = useCallback(async (id: string) => {
+  useEffect(() => {
+    if (view === "world") return;
+    loadRegion(view);
+    const tr = setInterval(() => loadRegion(view), REGION_REFRESH_MS);
+    return () => clearInterval(tr);
+  }, [view, loadRegion]);
+
+  const switchView = useCallback((id: string) => {
     setView(id);
     setSelected(null);
     selectedRef.current = null;
     setHistoryPts([]);
-    if (id !== "world") {
-      await fetch(`${API}/preset`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id }),
-      }).catch(() => {});
-      loadRegion();
-    }
-  }, [loadRegion]);
+    setRegion({}); // 이전 지역 잔상 방지 — 다음 tick에 새 프리셋 데이터로 채워짐
+  }, []);
 
   const selectFlight = useCallback(async (id: string) => {
     setSelected(id);
@@ -104,11 +101,12 @@ export default function ContrailApp() {
   const loadBrief = useCallback(async () => {
     setBrief({ loading: true });
     try {
-      const r = await fetch(`${API}/brief`, { method: "POST" });
+      const target = view === "world" ? "" : `?preset=${encodeURIComponent(view)}`;
+      const r = await fetch(`${API}/brief${target}`, { method: "POST" });
       const b = await r.json();
       setBrief(r.ok ? { text: b.brief } : { error: b.error ?? "브리핑 실패" });
     } catch { setBrief({ error: "브리핑 요청 실패" }); }
-  }, []);
+  }, [view]);
 
   const isWorld = view === "world";
   const preset = presets.find((p) => p.id === view) ?? null;
@@ -134,7 +132,7 @@ export default function ContrailApp() {
         <div className="stats">
           <span>추적 <b>{gs.count}</b>대</span>
           <span>공중 <b>{gs.airborne}</b>대</span>
-          <span>최다 국가 <b>{gs.top_country ?? "-"}</b></span>
+          <span>최다 기종 <b>{gs.top_type ?? "-"}</b></span>
           {!isWorld && region.stats && <span>지역 <b>{region.stats.count}</b>대</span>}
         </div>
       )}
@@ -179,13 +177,13 @@ export default function ContrailApp() {
 
       {!isWorld && (
         <table className="tbl">
-          <thead><tr><th>콜사인</th><th>국가</th><th>고도</th><th>속도</th></tr></thead>
+          <thead><tr><th>콜사인</th><th>기종</th><th>고도</th><th>속도</th></tr></thead>
           <tbody>
             {flights.slice(0, 50).map((f) => (
               <tr key={f.id} className={f.id === selected ? "on" : ""}
                   onClick={() => selectFlight(f.id)}>
-                <td>{f.callsign ?? f.id}</td>
-                <td>{f.origin_country ?? "-"}</td>
+                <td title={f.reg ?? undefined}>{f.callsign ?? f.id}</td>
+                <td>{f.type ?? "-"}</td>
                 <td>{f.alt_m != null ? `${Math.round(f.alt_m)}m` : "-"}</td>
                 <td>{f.velocity_ms != null ? `${Math.round(f.velocity_ms * 3.6)}km/h` : "-"}</td>
               </tr>
