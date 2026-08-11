@@ -1,0 +1,45 @@
+/* Wake Watch — 모든 선택자는 .app-wake 하위 네임스페이스.
+   테마 의존 색은 셸 전역 변수(--bg/--card/--text/--muted/--border/--accent) 소비. */
+
+.app-wake { --map-bg: #dfeaf2; --land: #9aa7b4; }
+[data-theme="dark"] .app-wake { --map-bg: #0a1420; --land: #3d4757; }
+
+.app-wake .wrap { padding: 16px 24px 48px; }
+.app-wake .head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.app-wake .head h1 { font-size: 20px; margin: 0; }
+.app-wake .presets button, .app-wake .chips button {
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  border-radius: 999px; padding: 4px 12px; margin-right: 6px; cursor: pointer;
+}
+.app-wake .presets button.on, .app-wake .chips button.on {
+  border-color: var(--accent); color: var(--accent);
+}
+.app-wake .notice { color: var(--bad); }
+.app-wake .stats { display: flex; gap: 16px; margin: 12px 0; color: var(--muted); }
+.app-wake .stats b { color: var(--text); }
+.app-wake .chips { margin-bottom: 8px; }
+.app-wake .map {
+  width: 100%; background: var(--map-bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.app-wake .map .geo-ocean { fill: var(--map-bg); }
+.app-wake .map .geo-land { fill: none; stroke: var(--land); stroke-width: 1; }
+.app-wake .vessel { cursor: pointer; }
+.app-wake .vessel.selected polygon { stroke: var(--accent); stroke-width: 2; }
+.app-wake .trail { fill: none; stroke: var(--accent); stroke-width: 1; opacity: .45; }
+.app-wake .trail.selected { opacity: 1; stroke-width: 1.5; }
+.app-wake .trail.history { stroke-dasharray: 4 3; opacity: .8; }
+.app-wake .brief { margin: 16px 0; }
+.app-wake .brief button {
+  border: 1px solid var(--accent); background: var(--card); color: var(--accent);
+  border-radius: 6px; padding: 6px 14px; cursor: pointer;
+}
+.app-wake .brief p { background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; box-shadow: var(--shadow); white-space: pre-wrap; }
+.app-wake .brief .error { color: var(--bad); }
+.app-wake .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.app-wake .tbl th, .app-wake .tbl td {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
+}
+.app-wake .tbl tr { cursor: pointer; }
+.app-wake .tbl tr.on td { color: var(--accent); }

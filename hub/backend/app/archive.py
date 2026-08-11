@@ -42,10 +42,48 @@ def archive_counts() -> dict[str, int]:
         return {}
 
 
+# --- 정규화 테이블 경로 (contrail/wake, 이후 quake 전환도 이 경로) ---------
+
+_PRUNE_SPECS: list[tuple[str, str, int]] = []  # (table, ts_col, days)
+
+
+def archive_ensure_schema(module: str, ddl: str, tables: list[str]) -> None:
+    try:
+        archive.ensure_schema(module, ddl, tables)
+    except Exception:  # noqa: BLE001 — best-effort: 모듈 기동을 깨지 않는다
+        log.exception("archive ensure_schema failed (module=%s)", module)
+
+
+def archive_insert(sql: str, rows: list[tuple]) -> int:
+    try:
+        return archive.insert_rows(sql, rows)
+    except Exception:  # noqa: BLE001 — best-effort
+        log.exception("archive insert failed")
+        return 0
+
+
+def archive_query(sql: str, params: tuple = ()) -> list[tuple]:
+    try:
+        return archive.query(sql, params)
+    except Exception:  # noqa: BLE001 — 조회 실패는 빈 결과로
+        log.exception("archive query failed")
+        return []
+
+
+def register_prune(table: str, ts_col: str, days: int) -> None:
+    spec = (table, ts_col, days)
+    if spec not in _PRUNE_SPECS:
+        _PRUNE_SPECS.append(spec)
+
+
 async def _prune_tick() -> int:
     deleted = archive.prune_snapshots(RETENTION_DAYS)
     if deleted:
         log.info("archive pruned %d snapshot rows (>%dd)", deleted, RETENTION_DAYS)
+    for table, ts_col, days in _PRUNE_SPECS:
+        n = archive.prune_table(table, ts_col, days)
+        if n:
+            log.info("archive pruned %d rows from %s (>%dd)", n, table, days)
     return deleted
 
 
