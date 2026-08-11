@@ -50,6 +50,7 @@ class Archive:
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        self._tables: dict[str, str] = {}
 
     def put_entities(self, module: str, items: Iterable[tuple[str, Any]]) -> int:
         """Insert natural-keyed items; returns how many were NEW."""
@@ -81,6 +82,9 @@ class Archive:
                 f"SELECT module, COUNT(*) FROM {table} GROUP BY module"  # noqa: S608
             ):
                 out[module] = out.get(module, 0) + n
+        for table, module in self._tables.items():
+            (n,) = self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()  # noqa: S608
+            out[module] = out.get(module, 0) + n
         return out
 
     def prune_snapshots(self, days: int) -> int:
@@ -90,6 +94,39 @@ class Archive:
             return 0
         cur = self._conn.execute(
             "DELETE FROM snapshots WHERE ts < ?", (time.time() - days * 86_400,)
+        )
+        self._conn.commit()
+        return cur.rowcount
+
+    # --- module-defined normalized tables (dim/fact) ---------------------
+
+    def ensure_schema(self, module: str, ddl: str, tables: list[str]) -> None:
+        """Run a module's DDL (CREATE IF NOT EXISTS) and register its tables
+        so counts()/prune_table() know them. Idempotent."""
+        self._conn.executescript(ddl)
+        self._conn.commit()
+        for t in tables:
+            self._tables[t] = module
+
+    def insert_rows(self, sql: str, rows: list[tuple]) -> int:
+        if not rows:
+            return 0
+        cur = self._conn.executemany(sql, rows)
+        self._conn.commit()
+        return cur.rowcount
+
+    def query(self, sql: str, params: tuple = ()) -> list[tuple]:
+        return self._conn.execute(sql, params).fetchall()
+
+    def prune_table(self, table: str, ts_col: str, days: int) -> int:
+        """Delete rows older than `days` from a REGISTERED table only —
+        the registry doubles as an identifier allowlist (no SQL injection
+        via table/column names)."""
+        if days <= 0 or table not in self._tables:
+            return 0
+        cur = self._conn.execute(
+            f"DELETE FROM {table} WHERE {ts_col} < ?",  # noqa: S608 — allowlisted
+            (time.time() - days * 86_400,),
         )
         self._conn.commit()
         return cur.rowcount
