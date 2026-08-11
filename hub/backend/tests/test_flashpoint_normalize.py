@@ -59,6 +59,14 @@ def test_malformed_rows_isolated():
     assert len(out) == 1 and out[0]["event_id"] == 1234567890
 
 
+def test_non_http_source_url_dropped():
+    # href로 렌더링되므로 javascript: 등 비-http 스킴은 저장 단계에서 차단
+    e = normalize_export([row({60: "javascript:alert(1)"})], roots=ROOTS)[0]
+    assert e["source_url"] is None
+    e2 = normalize_export([row({60: "https://ok.example/a"})], roots=ROOTS)[0]
+    assert e2["source_url"] == "https://ok.example/a"
+
+
 def test_missing_actors_and_numbers_become_none():
     e = normalize_export([row({6: "", 16: " ", 30: "", 34: ""})], roots=ROOTS)[0]
     assert e["actor1"] is None and e["actor2"] is None

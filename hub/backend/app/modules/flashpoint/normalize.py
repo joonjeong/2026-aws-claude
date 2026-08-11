@@ -23,6 +23,12 @@ def _clean(raw: str) -> str | None:
     return s or None
 
 
+def _clean_url(raw: str) -> str | None:
+    """href로 렌더링되는 값 — http(s) 외 스킴(javascript: 등)은 저장 전 차단."""
+    s = raw.strip()
+    return s if s.startswith(("http://", "https://")) else None
+
+
 def _num(raw: str, cast) -> float | int | None:
     try:
         return cast(raw)
@@ -67,7 +73,7 @@ def normalize_export(lines: Iterable[str], roots: set[str]) -> list[dict]:
                 "lat": float(c[_LAT]),
                 "lon": float(c[_LON]),
                 "country": _clean(c[_COUNTRY]),
-                "source_url": _clean(c[_URL]),
+                "source_url": _clean_url(c[_URL]),
             })
         except Exception:  # 한 행의 비정상이 배치를 죽이지 않음
             logger.warning("skipping malformed gdelt row", exc_info=True)

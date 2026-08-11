@@ -151,7 +151,7 @@ export default function FlashpointApp() {
               <td>{e.actor1 ?? "?"} → {e.actor2 ?? "?"}</td>
               <td>{e.country ?? "-"}</td>
               <td>{e.mentions ?? 0}</td>
-              <td>{e.source_url
+              <td>{e.source_url?.startsWith("http")
                 ? <a href={e.source_url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>기사</a>
                 : "-"}</td>
             </tr>
