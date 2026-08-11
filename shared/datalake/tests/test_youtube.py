@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from datalake.sources import trend
+from datalake.sources import youtube
 
 
 def _item(vid="v1", views="100", likes="5"):
@@ -20,7 +20,7 @@ def _item(vid="v1", views="100", likes="5"):
 
 def test_normalize_items():
     payload = {"items": [_item(), _item(vid="v2", views="abc", likes="-3"), "junk"]}
-    rows = trend.normalize(payload)
+    rows = youtube.normalize(payload)
     assert len(rows) == 2  # 깨진 항목 격리
     assert rows[0] == {
         "video_id": "v1", "title": "T", "channel": "C", "category_id": "10",
@@ -32,7 +32,7 @@ def test_normalize_items():
 
 def test_build_disabled_without_key(monkeypatch):
     monkeypatch.delenv("YT_API_KEY", raising=False)
-    assert trend.build() is None
+    assert youtube.build() is None
 
 
 async def test_fetch_key_never_leaks(monkeypatch):
@@ -45,9 +45,9 @@ async def test_fetch_key_never_leaks(monkeypatch):
         assert request.url.params["maxResults"] == "30"
         return httpx.Response(200, json={"items": [_item()]})
 
-    client = trend.TrendClient(transport=httpx.MockTransport(handler))
+    client = youtube.YoutubeClient(transport=httpx.MockTransport(handler))
     (rec,) = await client.fetch()
-    assert rec.source == "trend" and rec.kind == "trending"
+    assert rec.source == "youtube" and rec.kind == "trend"
     assert rec.payload["items"][0]["id"] == "v1"
     assert "SECRETKEY" not in json.dumps(rec.meta)  # 키 비노출
 
@@ -58,7 +58,7 @@ async def test_fetch_upstream_error_no_body_in_exception(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, json={"error": "quota SECRET details"})
 
-    client = trend.TrendClient(transport=httpx.MockTransport(handler))
+    client = youtube.YoutubeClient(transport=httpx.MockTransport(handler))
     with pytest.raises(RuntimeError) as exc_info:
         await client.fetch()
     assert "403" in str(exc_info.value)

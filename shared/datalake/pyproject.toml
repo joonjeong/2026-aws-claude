@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datalake"
-version = "0.4.0"
+version = "0.5.0"
 description = "claude-lab 독립 데이터레이크 수집기 — 소스별 one-shot CLI, 스케줄링은 외부 오케스트레이터(Temporal 예정) 소유"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,13 +18,30 @@ dependencies = [
 market = ["yfinance>=0.2", "pykrx>=1.0"]
 
 [project.scripts]
-datalake-quake = "datalake.cli.quake:main"
-datalake-news = "datalake.cli.news:main"
-datalake-trend = "datalake.cli.trend:main"
-datalake-contrail = "datalake.cli.contrail:main"
-datalake-wake = "datalake.cli.wake:main"
-datalake-market = "datalake.cli.market:main"
-datalake-flashpoint = "datalake.cli.flashpoint:main"
+# 명령 = 상류(source) 단위. kind(데이터셋)는 명령이 생산한다.
+datalake-usgs-feed = "datalake.cli.usgs_feed:main"
+datalake-bbc = "datalake.cli.rss:main_bbc"
+datalake-guardian = "datalake.cli.rss:main_guardian"
+datalake-nhk = "datalake.cli.rss:main_nhk"
+datalake-yna = "datalake.cli.rss:main_yna"
+datalake-aljazeera = "datalake.cli.rss:main_aljazeera"
+datalake-hani = "datalake.cli.rss:main_hani"
+datalake-khan = "datalake.cli.rss:main_khan"
+datalake-chosun = "datalake.cli.rss:main_chosun"
+datalake-sbs = "datalake.cli.rss:main_sbs"
+datalake-mk = "datalake.cli.rss:main_mk"
+datalake-hankyung = "datalake.cli.rss:main_hankyung"
+datalake-npr = "datalake.cli.rss:main_npr"
+datalake-nyt = "datalake.cli.rss:main_nyt"
+datalake-fox = "datalake.cli.rss:main_fox"
+datalake-wapo = "datalake.cli.rss:main_wapo"
+datalake-youtube = "datalake.cli.youtube:main"
+datalake-adsblol = "datalake.cli.adsblol:main"
+datalake-opensky = "datalake.cli.opensky:main"
+datalake-aisstream = "datalake.cli.aisstream:main"
+datalake-yfinance = "datalake.cli.yfinance:main"
+datalake-pykrx = "datalake.cli.pykrx:main"
+datalake-gdelt = "datalake.cli.gdelt:main"
 datalake-normalize = "datalake.cli.normalize:main"
 datalake-maintenance = "datalake.cli.maintenance:main"
 

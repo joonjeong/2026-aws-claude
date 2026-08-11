@@ -1,12 +1,12 @@
 import httpx
 import pytest
 
-from datalake.sources import contrail
+from datalake.sources import adsblol
 
 
 def test_adsblol_url_is_raw_unencoded():
     # re-api는 %2C·jv2= 를 400으로 거부 — 원시 쿼리 형식 고정 (hub와 동일)
-    url = contrail.adsblol_url("https://re-api.adsb.lol/", (30.0, 120.0, 45.0, 135.0))
+    url = adsblol.adsblol_url("https://re-api.adsb.lol/", (30.0, 120.0, 45.0, 135.0))
     assert url == "https://re-api.adsb.lol/?box=30.0,45.0,120.0,135.0&jv2"
 
 
@@ -20,7 +20,7 @@ def test_normalize_readsb_units_and_defense():
         {"hex": "nopos1"},                       # 위치 없음 → 스킵
         "junk",                                  # 깨진 항목 → 격리
     ]}
-    rows = contrail.normalize(payload, now=1000.0)
+    rows = adsblol.normalize(payload, now=1000.0)
     assert len(rows) == 2
 
     a = rows[0]
@@ -38,7 +38,7 @@ def test_normalize_readsb_units_and_defense():
 
 
 async def test_global_and_region_fetch(monkeypatch):
-    monkeypatch.setattr(contrail, "REGION_SPACING_S", 0.0)  # 테스트에선 대기 생략
+    monkeypatch.setattr(adsblol, "REGION_SPACING_S", 0.0)  # 테스트에선 대기 생략
     calls = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -46,15 +46,15 @@ async def test_global_and_region_fetch(monkeypatch):
         assert request.headers["user-agent"].startswith("DataLake/0.1")
         return httpx.Response(200, json={"ac": [{"hex": "a", "lat": 1, "lon": 2}]})
 
-    client = contrail.ContrailClient(transport=httpx.MockTransport(handler))
+    client = adsblol.AdsbLolClient(transport=httpx.MockTransport(handler))
 
     (rec,) = await client.fetch_global()
-    assert rec.kind == "global"
+    assert rec.kind == "contrail_global"
     assert "box=-90.0,90.0,-180.0,180.0&jv2" in calls[0]
 
     recs = await client.fetch_regions()
     assert [r.kind for r in recs] == [
-        "region_kr", "region_japan", "region_europe", "region_us-east"]
-    assert all(r.source == "contrail" for r in recs)
+        "contrail_region_kr", "contrail_region_japan", "contrail_region_europe", "contrail_region_us-east"]
+    assert all(r.source == "adsblol" for r in recs)
     assert recs[0].payload == {"ac": [{"hex": "a", "lat": 1, "lon": 2}]}
     assert recs[0].meta["bbox"] == "30.0,120.0,45.0,135.0"

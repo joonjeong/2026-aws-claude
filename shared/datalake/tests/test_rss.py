@@ -1,6 +1,7 @@
 import httpx
+import pytest
 
-from datalake.sources import news
+from datalake.sources import rss
 
 
 def _rss(items: str) -> str:
@@ -15,10 +16,15 @@ def _item(link="https://ex.com/a", title="Hello", pub="Mon, 10 Aug 2026 01:00:00
 
 
 def test_feeds_are_15():
-    assert len(news.FEEDS) == 15
-    assert {f["id"] for f in news.FEEDS} >= {"bbc", "yna", "wapo", "mk", "nyt"}
+    assert len(rss.FEEDS) == 15
+    assert set(rss.FEEDS) >= {"bbc", "yna", "wapo", "mk", "nyt"}
     # WaPo는 브라우저 UA 오버라이드 필수 (비브라우저 UA 403)
-    assert "Mozilla/5.0" in next(f for f in news.FEEDS if f["id"] == "wapo")["user_agent"]
+    assert "Mozilla/5.0" in rss.FEEDS["wapo"]["user_agent"]
+
+
+def test_unknown_feed_rejected():
+    with pytest.raises(ValueError):
+        rss.RssClient("nope")
 
 
 def test_normalize_strips_html_and_filters_schemes():
@@ -28,7 +34,7 @@ def test_normalize_strips_html_and_filters_schemes():
         + _item(link="https://ex.com/b", title="<i>Tag</i>gy",
                 pub="Tue, 11 Aug 2026 01:00:00 GMT")
     )
-    rows = news.normalize("bbc", xml)
+    rows = rss.normalize("bbc", xml)
     assert [r["link"] for r in rows] == ["https://ex.com/b", "https://ex.com/a"]  # 최신순
     assert rows[1]["summary"] == "bold & x y"
     assert rows[0]["title"] == "Tag gy"  # 태그는 공백 치환 후 압축 (hub 동작)
@@ -42,41 +48,33 @@ def test_normalize_caps_latest_15():
               pub=f"Mon, 10 Aug 2026 {i:02d}:00:00 GMT")
         for i in range(17)
     )
-    rows = news.normalize("bbc", _rss(items))
+    rows = rss.normalize("bbc", _rss(items))
     assert len(rows) == 15
     assert rows[0]["link"] == "https://ex.com/16"
 
 
 def test_normalize_summary_cap_300():
-    rows = news.normalize("bbc", _rss(_item(summary="x" * 500)))
+    rows = rss.normalize("bbc", _rss(_item(summary="x" * 500)))
     assert len(rows[0]["summary"]) == 300
 
 
-async def test_fetch_selected_feeds_and_ua():
+async def test_fetch_source_is_feed_and_kind_is_news():
     seen_ua = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen_ua[str(request.url)] = request.headers["user-agent"]
         return httpx.Response(200, text=_rss(_item()))
 
-    client = news.NewsClient(transport=httpx.MockTransport(handler))
-    records = await client.fetch(feed_ids=["bbc", "wapo"])
-    assert [r.kind for r in records] == ["bbc", "wapo"]
-    assert all(r.source == "news" for r in records)
-    assert records[0].payload.startswith("<?xml")
-    assert records[0].meta["status"] == 200
+    transport = httpx.MockTransport(handler)
+
+    (rec,) = await rss.RssClient("bbc", transport=transport).fetch()
+    assert rec.source == "bbc" and rec.kind == "news"
+    assert rec.payload.startswith("<?xml")
+    assert rec.meta["status"] == 200
+
+    (rec_wapo,) = await rss.RssClient("wapo", transport=transport).fetch()
+    assert rec_wapo.source == "wapo" and rec_wapo.kind == "news"
 
     uas = list(seen_ua.values())
     assert any(ua.startswith("DataLake/0.1") for ua in uas)
     assert any(ua.startswith("Mozilla/5.0") for ua in uas)  # wapo 오버라이드
-
-
-async def test_fetch_isolates_feed_failure():
-    def handler(request: httpx.Request) -> httpx.Response:
-        if "bbci" in str(request.url):
-            return httpx.Response(503)
-        return httpx.Response(200, text=_rss(_item()))
-
-    client = news.NewsClient(transport=httpx.MockTransport(handler))
-    records = await client.fetch(feed_ids=["bbc", "npr"])
-    assert [r.kind for r in records] == ["npr"]  # bbc 실패가 npr을 못 죽임

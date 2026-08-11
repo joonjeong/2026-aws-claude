@@ -1,4 +1,4 @@
-"""quake — USGS 지진 피드 클라이언트. 정규화는 hub quake 모듈과 동일.
+"""usgs_feed — USGS 지진 피드 상류. 생산 kind: quake.
 
 이식 원본: hub/backend/app/modules/quake/collector.py (코드 이식, import 금지).
 Record.payload는 USGS 응답 전체(FeatureCollection) 원본.
@@ -15,13 +15,13 @@ import httpx
 from ..core.env import env_float, env_str
 from ..core.source import Record
 
-log = logging.getLogger("datalake.quake")
+log = logging.getLogger("datalake.usgs_feed")
 
 FEED_URL = env_str(
-    "DATALAKE_QUAKE_FEED_URL",
+    "DATALAKE_USGS_FEED_URL",
     "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson",
 )
-TIMEOUT_S = env_float("DATALAKE_QUAKE_TIMEOUT_S", 10.0)
+TIMEOUT_S = env_float("DATALAKE_USGS_FEED_TIMEOUT_S", 10.0)
 
 
 def _float(value, default: float = 0.0) -> float:
@@ -67,8 +67,8 @@ def normalize(payload: dict) -> list[dict]:
     return events
 
 
-class QuakeClient:
-    id = "quake"
+class UsgsFeedClient:
+    id = "usgs_feed"
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
@@ -84,7 +84,7 @@ class QuakeClient:
         return [
             Record(
                 source=self.id,
-                kind="usgs_feed",
+                kind="quake",
                 payload=payload,
                 meta={
                     "url": FEED_URL,
@@ -95,5 +95,5 @@ class QuakeClient:
         ]
 
 
-def build() -> QuakeClient:
-    return QuakeClient()
+def build() -> UsgsFeedClient:
+    return UsgsFeedClient()

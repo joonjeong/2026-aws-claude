@@ -1,4 +1,4 @@
-"""flashpoint — GDELT v2 15분 export (분쟁·불안 이벤트). hub flashpoint와 동일 주기.
+"""gdelt — GDELT v2 15분 export 상류. 생산 kind: flashpoint (분쟁·불안 이벤트).
 
 이식 원본: hub/backend/app/modules/flashpoint/{config,collector,normalize}.py. import 금지.
 
@@ -26,13 +26,13 @@ import httpx
 from ..core.env import env_float, env_str
 from ..core.source import Record
 
-log = logging.getLogger("datalake.flashpoint")
+log = logging.getLogger("datalake.gdelt")
 
 LASTUPDATE_URL = env_str(
-    "DATALAKE_FLASHPOINT_URL",
+    "DATALAKE_GDELT_URL",
     "http://data.gdeltproject.org/gdeltv2/lastupdate.txt",
 )
-TIMEOUT_S = env_float("DATALAKE_FLASHPOINT_TIMEOUT_S", 30.0)
+TIMEOUT_S = env_float("DATALAKE_GDELT_TIMEOUT_S", 30.0)
 
 # lastupdate.txt와 같은 디렉터리의 파일만 허용 — 평문 HTTP 응답 오염 시
 # 임의 호스트로 GET이 나가는 것(SSRF) 방지 (hub와 동일)
@@ -43,7 +43,7 @@ MAX_CSV_BYTES = 200 * 1024 * 1024  # 압축해제 상한 (zip 폭탄 방지)
 # CAMEO 루트코드 필터 — 14 시위 ~ 20 대량폭력 (SQLite 싱크용, hub와 동일)
 ROOTS = {
     r.strip()
-    for r in env_str("DATALAKE_FLASHPOINT_ROOTS", "14,15,16,17,18,19,20").split(",")
+    for r in env_str("DATALAKE_GDELT_ROOTS", "14,15,16,17,18,19,20").split(",")
     if r.strip()
 }
 
@@ -140,8 +140,8 @@ def normalize(lines, roots: set[str] | None = None) -> list[dict]:
     return out
 
 
-class FlashpointClient:
-    id = "flashpoint"
+class GdeltClient:
+    id = "gdelt"
 
     def __init__(
         self,
@@ -184,7 +184,7 @@ class FlashpointClient:
         return [
             Record(
                 source=self.id,
-                kind="export",
+                kind="flashpoint",
                 payload=csv_text,
                 meta={
                     "url": url,
@@ -196,5 +196,5 @@ class FlashpointClient:
         ]
 
 
-def build(state_path: Path | str | None = None) -> FlashpointClient:
-    return FlashpointClient(state_path=state_path)
+def build(state_path: Path | str | None = None) -> GdeltClient:
+    return GdeltClient(state_path=state_path)

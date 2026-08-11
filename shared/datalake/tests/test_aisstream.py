@@ -1,4 +1,4 @@
-from datalake.sources import wake
+from datalake.sources import aisstream
 
 
 def _pos_msg(mmsi=440123456, lat=36.0, lon=129.0, sog=12.3, cog=90.0, heading=91):
@@ -14,12 +14,12 @@ def _pos_msg(mmsi=440123456, lat=36.0, lon=129.0, sog=12.3, cog=90.0, heading=91
 
 def test_build_disabled_without_key(monkeypatch):
     monkeypatch.delenv("DATALAKE_AIS_KEY", raising=False)
-    assert wake.build() is None
+    assert aisstream.build() is None
 
 
 def test_subscribe_payload_shape(monkeypatch):
     monkeypatch.setenv("DATALAKE_AIS_KEY", "K")
-    src = wake.WakeClient(api_key="K")
+    src = aisstream.AisStreamClient(api_key="K")
     sub = src.subscribe_payload()
     assert sub == {
         "APIKey": "K",
@@ -29,9 +29,9 @@ def test_subscribe_payload_shape(monkeypatch):
 
 
 def test_parse_wraps_raw_message():
-    src = wake.WakeClient(api_key="K")
+    src = aisstream.AisStreamClient(api_key="K")
     (rec,) = src.parse(_pos_msg())
-    assert rec.source == "wake" and rec.kind == "ais"
+    assert rec.source == "aisstream" and rec.kind == "wake"
     assert rec.payload["MessageType"] == "PositionReport"
     assert rec.meta == {"preset": "kr"}
 
@@ -39,17 +39,17 @@ def test_parse_wraps_raw_message():
 
 
 def test_normalize_position_sentinels():
-    row = wake.normalize_position(
+    row = aisstream.normalize_position(
         _pos_msg(sog=102.3, cog=360.0, heading=511), now=1000.0)
     assert row["sog_kn"] is None and row["cog_deg"] is None
     assert row["heading_deg"] is None
     assert row["id"] == "440123456" and row["ts"] == 1000.0
     assert row["name"] == "HANARA"
 
-    ok = wake.normalize_position(_pos_msg(), now=1000.0)
+    ok = aisstream.normalize_position(_pos_msg(), now=1000.0)
     assert ok["sog_kn"] == 12.3 and ok["cog_deg"] == 90.0 and ok["heading_deg"] == 91.0
 
-    assert wake.normalize_position({"MetaData": {}}, now=0) is None  # MMSI 없음
+    assert aisstream.normalize_position({"MetaData": {}}, now=0) is None  # MMSI 없음
 
 
 def test_normalize_static_and_ship_type():
@@ -58,11 +58,11 @@ def test_normalize_static_and_ship_type():
         "MetaData": {"MMSI": 440000001},
         "Message": {"ShipStaticData": {"Name": "EVER X", "Type": 70, "CallSign": "AB1"}},
     }
-    mmsi, meta = wake.normalize_static(msg)
+    mmsi, meta = aisstream.normalize_static(msg)
     assert mmsi == "440000001"
     assert meta == {"name": "EVER X", "ship_type": "화물", "callsign": "AB1"}
 
-    assert wake.ship_type_label(30) == "어선"
-    assert wake.ship_type_label(65) == "여객"
-    assert wake.ship_type_label(85) == "탱커"
-    assert wake.ship_type_label("bad") == "기타"
+    assert aisstream.ship_type_label(30) == "어선"
+    assert aisstream.ship_type_label(65) == "여객"
+    assert aisstream.ship_type_label(85) == "탱커"
+    assert aisstream.ship_type_label("bad") == "기타"

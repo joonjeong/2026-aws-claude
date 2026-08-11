@@ -16,7 +16,7 @@ DT = "2026-08-11"
 
 def _quake_rec(ts=TS):
     return Record(
-        source="quake", kind="usgs_feed", fetched_at=ts, meta={},
+        source="usgs_feed", kind="quake", fetched_at=ts, meta={},
         payload={"features": [{
             "id": "us100",
             "properties": {"mag": 4.5, "place": "Korea", "time": 1786430000000},
@@ -27,7 +27,7 @@ def _quake_rec(ts=TS):
 
 def _market_rec():
     return Record(
-        source="market", kind="overview", fetched_at=TS, meta={},
+        source="yfinance", kind="market_overview", fetched_at=TS, meta={},
         payload={
             "indices": [{"symbol": "^KS11", "name": "KOSPI", "price": 3000.0,
                          "change": 10.0, "change_pct": 0.33, "volume": 0,
@@ -41,7 +41,7 @@ def _market_rec():
 
 def _wake_recs():
     pos = Record(
-        source="wake", kind="ais", fetched_at=TS, meta={"preset": "kr"},
+        source="aisstream", kind="wake", fetched_at=TS, meta={"preset": "kr"},
         payload={"MessageType": "PositionReport",
                  "MetaData": {"MMSI": 440000001, "ShipName": "HANARA"},
                  "Message": {"PositionReport": {
@@ -49,7 +49,7 @@ def _wake_recs():
                      "Sog": 12.3, "Cog": 90.0, "TrueHeading": 91}}},
     )
     static = Record(
-        source="wake", kind="ais", fetched_at=TS + 60, meta={"preset": "kr"},
+        source="aisstream", kind="wake", fetched_at=TS + 60, meta={"preset": "kr"},
         payload={"MessageType": "ShipStaticData",
                  "MetaData": {"MMSI": 440000001},
                  "Message": {"ShipStaticData": {"Name": "HANARA", "Type": 70,

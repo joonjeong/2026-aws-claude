@@ -17,14 +17,15 @@ hub는 서빙이 목적이라 정규화본만 남기고 원본을 버리며 fact
 ```
 [외부 소스]                [one-shot CLI (uv run …)]        [데이터레이크 DATALAKE_ROOT]
 
-USGS 지진 피드 ──60s──▶ datalake-quake ────┐
-RSS 15개 매체 ──120s──▶ datalake-news ─────┤
-YouTube API ────60s──▶ datalake-trend ─────┤     bronze/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl[.gz]
-adsb.lol·OpenSky ─60s·600s▶ datalake-contrail ┼─▶ 한 줄 = {"fetched_at","source","kind","meta","payload(원본)"}
-AISStream ────상시───▶ datalake-wake ──────┤     ◀── 진실의 원천 (append-only)
-yfinance·pykrx ─45s/600s▶ datalake-market ─┤                    │
-GDELT export ──900s──▶ datalake-flashpoint ┘                    │  datalake-normalize
-                                                                │  (시간당, 파티션 재작성 = 멱등)
+USGS 지진 피드 ──60s──▶ datalake-usgs-feed ─┐
+RSS 매체 15개 ──120s──▶ datalake-bbc … -wapo ─┤
+YouTube API ────60s──▶ datalake-youtube ─────┤   bronze/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl[.gz]
+adsb.lol ──60s·600s──▶ datalake-adsblol ─────┼─▶ 한 줄 = {"fetched_at","source","kind","meta","payload(원본)"}
+OpenSky ───60s·600s──▶ datalake-opensky ─────┤   source = 상류, kind = 데이터셋 ◀── 진실의 원천
+AISStream ────상시───▶ datalake-aisstream ───┤                  │
+yfinance ──45s/600s──▶ datalake-yfinance ────┤                  │  datalake-normalize
+pykrx ─────45s/600s──▶ datalake-pykrx ───────┤                  │  (시간당, 파티션 재작성 = 멱등)
+GDELT export ──900s──▶ datalake-gdelt ───────┘                  │
                                                                 ▼
                                             silver/<table>/dt=YYYY-MM-DD/part-000.parquet
                                             ◀── 정규화 소비 존 (zstd, pyarrow 스키마 내장)
@@ -40,11 +41,12 @@ GDELT export ──900s──▶ datalake-flashpoint ┘                    │ 
 (flashpoint last_url, OpenSky 토큰 캐시). 보조 명령:
 `datalake-maintenance`(일 1회 — 전일 bronze gzip + 보존 프루닝).
 
-**다중 제공자 소스**: contrail은 상류가 2개(adsb.lol 기본 / OpenSky
-OAuth2·익명 폴백) — bronze는 kind 접두사로 경로 분리(`region_kr` vs
-`opensky_region_kr`), 포맷별 normalize(readsb/states)가 silver의 같은
-제공자 중립 테이블로 수렴하고 (icao24, ts) 키가 겹침을 병합한다.
-`--provider` 플래그 또는 `DATALAKE_CONTRAIL_PROVIDER`로 선택.
+**봉투 의미론 (v0.5)**: `source` = 실제 상류(usgs_feed, bbc, adsblol …),
+`kind` = 생산 데이터셋(quake, news, contrail_region_kr …). 명령도 상류
+단위이며 한 상류가 여러 kind를 생산할 수 있다(adsblol → contrail 5개).
+같은 데이터셋을 여러 상류가 공급하면(contrail: adsblol/opensky) bronze는
+source로 경로가 갈리고 silver의 제공자 중립 테이블로 수렴 —
+(icao24, ts) 키가 겹침을 병합한다.
 
 ## 3. hub와의 독립성 경계
 
@@ -71,13 +73,14 @@ AST 파싱해 `hub.*`/`app.*`/`labkit` import를 발견하면 실패한다.
 
 ```
 shared/datalake/datalake/
-├── sources/            ★ 소스별 순수 클라이언트 — fetch·normalize만.
-│   quake.py news.py      저장·경로·스케줄을 모른다 → 어떤 소비자든
-│   trend.py contrail.py   (향후 통합 솔루션 포함) 그대로 import 가능
-│   wake.py market.py
-│   flashpoint.py
-├── cli/                ★ 클라이언트를 래핑하는 one-shot 명령 (pyproject scripts)
-│   quake.py … normalize.py maintenance.py, _common.py(싱크 조립·배출 격리)
+├── sources/            ★ 상류별 순수 클라이언트 — fetch·normalize만.
+│   usgs_feed.py rss.py    저장·경로·스케줄을 모른다 → 어떤 소비자든
+│   youtube.py adsblol.py   (향후 통합 솔루션 포함) 그대로 import 가능
+│   opensky.py aisstream.py
+│   yfinance.py pykrx.py gdelt.py
+├── cli/                ★ 상류별 one-shot 명령 25개 (pyproject scripts)
+│   usgs_feed.py rss.py(매체 15개 main) youtube.py adsblol.py opensky.py
+│   aisstream.py yfinance.py pykrx.py gdelt.py normalize.py maintenance.py
 ├── model.py            ★ 정규화 존 데이터 모델의 단일 진실 (pyarrow 스키마)
 ├── core/
 │   ├── source.py       Record 봉투 타입
@@ -98,7 +101,7 @@ hub 정규화 스키마와 동형 — hub DB와 조인·비교가 쉽다. market
 
 | 테이블 | 자연키 | 병합 | 내용 |
 |---|---|---|---|
-| quake_events | id | 최초 관측 | USGS 지진 이벤트 |
+| quake_events | id | 최초 관측 | USGS 지진 이벤트 (상류: usgs_feed) |
 | news_articles | link | 최초 관측 | RSS 기사 (HTML 제거, 요약 300자 캡) |
 | trend_videos | video_id | dim 병합 | YouTube 영상 메타 |
 | trend_video_stats | (video_id, ts) | 최초 관측 | 60s 버킷 순위·조회수 fact |
@@ -124,13 +127,15 @@ datalake에는 스케줄러·재시도·백오프가 **없다**. 향후 Temporal
 소유한다는 전제로 중복 기능을 제거했고, 계약은 종료 코드뿐이다:
 
 ```
-Temporal 스케줄 ──▶ uv run datalake-quake        (매 60s)      ┐
-               ──▶ uv run datalake-news          (매 120s)     │ 종료 코드 계약
-               ──▶ uv run datalake-contrail --scope regions (60s)   0 = 성공(0건 포함)
-               ──▶ uv run datalake-contrail --scope global (600s)   1 = 실패 → 재시도는
-               ──▶ uv run datalake-market        (장중 45s/장외 600s)     Temporal 정책
-               ──▶ uv run datalake-flashpoint    (매 900s)     │ 2 = 소스 비활성
-               ──▶ uv run datalake-wake --duration N (겹침 없는 구간)     (키·엑스트라 부재)
+Temporal 스케줄 ──▶ uv run datalake-usgs-feed    (매 60s)      ┐
+               ──▶ uv run datalake-bbc … -wapo   (매체별 120s) │ 종료 코드 계약
+               ──▶ uv run datalake-youtube       (매 60s)      │   0 = 성공(0건 포함)
+               ──▶ uv run datalake-adsblol --scope regions (60s) / global (600s)
+               ──▶ uv run datalake-opensky --scope … (동일)    │   1 = 실패 → 재시도는
+               ──▶ uv run datalake-yfinance      (장중 45s/장외 600s)   Temporal 정책
+               ──▶ uv run datalake-pykrx         (장중 45s/장외 600s)
+               ──▶ uv run datalake-gdelt         (매 900s)     │   2 = 상류 비활성
+               ──▶ uv run datalake-aisstream --duration N (겹침 없는 구간)  (키·엑스트라 부재)
                ──▶ uv run datalake-normalize     (매시 + 자정 후 전일 확정)
                ──▶ uv run datalake-maintenance   (일 1회)      ┘
 ```
@@ -176,6 +181,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.2 | labkit 제거(완전 무의존) · 소스별 one-shot CLI · 스케줄링 전면 제거 | 사용자 결정: 소스별 독립 실행 명령 + Temporal 도입 예정이라 중복 기능 제거 |
 | v0.3 | SQLite 제거 · `model.py` 명시적 데이터 모델 · Parquet 정규화 존 · FDW 소비 | 사용자 결정: 파일이 인터페이스, DB는 외부 테이블(FDW)로 연결만 |
 | v0.4 | 메달리온 존 네이밍(bronze/silver/gold 예약) · contrail 다중 제공자(adsb.lol/OpenSky) | 사용자 결정: 메달리온 관례 채택 + 다중 상류 소스 대응 실증 |
+| v0.5 | 봉투 의미 반전: source=상류·kind=데이터셋 · 명령 25개를 상류 단위로 재편(usgs-feed, bbc, adsblol, yfinance, pykrx …) | 사용자 결정: 상류가 수집의 단위 — kind 접두사 편법 제거, 저장 프로토콜(봉투)로 통일 |
 
 ## 10. 검증 상태 (2026-08-11)
 

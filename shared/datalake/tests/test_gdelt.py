@@ -4,7 +4,7 @@ import zipfile
 import httpx
 import pytest
 
-from datalake.sources import flashpoint
+from datalake.sources import gdelt
 
 
 def _row(event_id="1001", root="19", lat="26.5", lon="52.0", **over):
@@ -44,14 +44,14 @@ LASTUPDATE = (
 
 
 def test_pick_export_url():
-    url = flashpoint.pick_export_url(LASTUPDATE)
+    url = gdelt.pick_export_url(LASTUPDATE)
     assert url.endswith("20260811063000.export.CSV.zip")
 
 
 def test_pick_export_url_rejects_foreign_host():
     evil = "1 a http://evil.example/x.export.CSV.zip\n"
     with pytest.raises(ValueError):
-        flashpoint.pick_export_url(evil)  # SSRF 가드 (hub와 동일)
+        gdelt.pick_export_url(evil)  # SSRF 가드 (hub와 동일)
 
 
 def test_normalize_filters_and_defends():
@@ -62,7 +62,7 @@ def test_normalize_filters_and_defends():
         _row(event_id="bad-id"),                 # id 비정상 → 스킵
         "junk\trow",                             # 기형 행 → 격리
     ]
-    rows = flashpoint.normalize(lines)
+    rows = gdelt.normalize(lines)
     assert len(rows) == 1
     e = rows[0]
     assert e["event_id"] == 1001 and e["root"] == "19"
@@ -73,7 +73,7 @@ def test_normalize_filters_and_defends():
 
 
 def test_normalize_blocks_bad_url_scheme():
-    (e,) = flashpoint.normalize([_row(**{"60": "javascript:alert(1)"})])
+    (e,) = gdelt.normalize([_row(**{"60": "javascript:alert(1)"})])
     assert e["source_url"] is None
 
 
@@ -87,35 +87,35 @@ async def test_fetch_dedups_same_file_across_runs(tmp_path):
             return httpx.Response(200, text=LASTUPDATE)
         return httpx.Response(200, content=csv_zip)
 
-    state = tmp_path / "_state" / "flashpoint_last_url"
+    state = tmp_path / "_state" / "gdelt_last_url"
     transport = httpx.MockTransport(handler)
 
-    client = flashpoint.FlashpointClient(transport=transport, state_path=state)
+    client = gdelt.GdeltClient(transport=transport, state_path=state)
     (rec,) = await client.fetch()
-    assert rec.source == "flashpoint" and rec.kind == "export"
+    assert rec.source == "gdelt" and rec.kind == "flashpoint"
     assert rec.payload.startswith("1001\t")  # 전체 CSV 원문 (필터 전)
     assert rec.meta["url"].endswith(".export.CSV.zip")
     assert rec.meta["lines"] == 1
 
     # 같은 파일 URL 재등장 → 빈 배치, zip 재다운로드 없음 —
     # 새 인스턴스(one-shot 재실행)에서도 상태 파일로 이어진다
-    fresh = flashpoint.FlashpointClient(transport=transport, state_path=state)
+    fresh = gdelt.GdeltClient(transport=transport, state_path=state)
     n_before = len(calls)
     assert await fresh.fetch() == []
     assert len(calls) == n_before + 1  # lastupdate.txt만 재조회
 
     # --force는 상태를 무시하고 재수집
     (again,) = await fresh.fetch(force=True)
-    assert again.kind == "export"
+    assert again.kind == "flashpoint"
 
 
 async def test_fetch_zip_too_large():
     def handler(request: httpx.Request) -> httpx.Response:
         if str(request.url).endswith("lastupdate.txt"):
             return httpx.Response(200, text=LASTUPDATE)
-        return httpx.Response(200, content=b"x" * (flashpoint.MAX_ZIP_BYTES + 1))
+        return httpx.Response(200, content=b"x" * (gdelt.MAX_ZIP_BYTES + 1))
 
-    client = flashpoint.FlashpointClient(transport=httpx.MockTransport(handler))
+    client = gdelt.GdeltClient(transport=httpx.MockTransport(handler))
     with pytest.raises(ValueError, match="zip too large"):
         await client.fetch()
 
@@ -124,7 +124,7 @@ def test_transform_applies_root_filter():
     from datalake.core.source import Record
     from datalake.core.transform import rows_for
 
-    rec = Record(source="flashpoint", kind="export",
+    rec = Record(source="gdelt", kind="flashpoint",
                  payload=_row() + "\n" + _row(event_id="1002", root="01"),
                  meta={}, fetched_at=1786429800.0)
     tables = rows_for(rec)

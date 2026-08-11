@@ -1,4 +1,4 @@
-"""wake — AISStream WebSocket 해상 트래픽. hub wake 모듈과 동일 구독·정규화.
+"""aisstream — AISStream WebSocket 상류. 생산 kind: wake (해상 트래픽).
 
 이식 원본: hub/backend/app/modules/wake/{collector,config}.py. import 금지.
 
@@ -16,7 +16,7 @@ import os
 from ..core.env import env_str
 from ..core.source import Record
 
-log = logging.getLogger("datalake.wake")
+log = logging.getLogger("datalake.aisstream")
 
 STREAM_URL = env_str("DATALAKE_AIS_URL", "wss://stream.aisstream.io/v0/stream")
 KEY_ENV = "DATALAKE_AIS_KEY"
@@ -27,7 +27,7 @@ PRESETS: dict[str, tuple] = {
     "taiwan": (20.0, 115.0, 28.0, 125.0),
     "sea": (-10.0, 95.0, 15.0, 120.0),
 }
-DEFAULT_PRESET = env_str("DATALAKE_WAKE_PRESET", "kr")  # hub WAKE_DEFAULT_PRESET
+DEFAULT_PRESET = env_str("DATALAKE_AISSTREAM_PRESET", "kr")  # hub WAKE_DEFAULT_PRESET
 
 
 def ship_type_label(code) -> str:
@@ -86,8 +86,8 @@ def normalize_static(msg: dict) -> tuple[str, dict] | None:
     }
 
 
-class WakeClient:
-    id = "wake"
+class AisStreamClient:
+    id = "aisstream"
     url = STREAM_URL
 
     def __init__(self, api_key: str, preset: str | None = None) -> None:
@@ -108,13 +108,13 @@ class WakeClient:
         if not isinstance(msg, dict):
             log.warning("non-dict AIS message skipped: %s", type(msg).__name__)
             return []
-        return [Record(source=self.id, kind="ais", payload=msg,
+        return [Record(source=self.id, kind="wake", payload=msg,
                        meta={"preset": self._preset})]
 
 
-def build(preset: str | None = None) -> WakeClient | None:
+def build(preset: str | None = None) -> AisStreamClient | None:
     api_key = os.environ.get(KEY_ENV)
     if not api_key:
-        log.info("wake 비활성: %s 미설정 (hub 키 공유 금지 — 전용 키 필요)", KEY_ENV)
+        log.info("aisstream 비활성: %s 미설정 (hub 키 공유 금지 — 전용 키 필요)", KEY_ENV)
         return None
-    return WakeClient(api_key=api_key, preset=preset)
+    return AisStreamClient(api_key=api_key, preset=preset)

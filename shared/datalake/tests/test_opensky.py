@@ -1,4 +1,4 @@
-"""contrail OpenSky 제공자 — states 정규화·인증·익명 폴백·kind 접두사."""
+"""opensky 상류 — states 정규화·인증·익명 폴백·kind (adsblol과 수렴)."""
 
 import json
 
@@ -6,7 +6,7 @@ import httpx
 
 from datalake.core.source import Record
 from datalake.core.transform import rows_for
-from datalake.sources import contrail
+from datalake.sources import opensky
 
 
 def _state(icao="abc123", lon=127.0, lat=37.5):
@@ -22,7 +22,7 @@ def test_normalize_states():
         [None, "", None, None, None, None, None] + [None] * 4,  # icao 없음 → 스킵
         "junk",                                                  # 기형 → 격리
     ]}
-    rows = contrail.normalize_states(payload, now=1000.0)
+    rows = opensky.normalize(payload, now=1000.0)
     assert len(rows) == 1
     s = rows[0]
     assert s["id"] == "abc123" and s["callsign"] == "KAL123"
@@ -33,16 +33,8 @@ def test_normalize_states():
     assert s["type"] is None and s["reg"] is None
 
 
-def test_normalize_for_kind_dispatch():
-    readsb = {"ac": [{"hex": "a", "lat": 1.0, "lon": 2.0}]}
-    states = {"states": [_state()]}
-    assert contrail.normalize_for_kind("region_kr", readsb, now=0)[0]["id"] == "a"
-    assert contrail.normalize_for_kind(
-        "opensky_region_kr", states, now=0)[0]["id"] == "abc123"
-
-
-async def test_opensky_fetch_auth_and_kind(tmp_path, monkeypatch):
-    monkeypatch.setattr(contrail, "REGION_SPACING_S", 0.0)
+async def test_fetch_auth_kind_and_token_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(opensky, "REGION_SPACING_S", 0.0)
     monkeypatch.setenv("DATALAKE_OPENSKY_CLIENT_ID", "cid")
     monkeypatch.setenv("DATALAKE_OPENSKY_CLIENT_SECRET", "sec")
     token_calls = []
@@ -59,32 +51,28 @@ async def test_opensky_fetch_auth_and_kind(tmp_path, monkeypatch):
         return httpx.Response(200, json={"states": [_state()]})
 
     state = tmp_path / "opensky_token.json"
-    client = contrail.ContrailClient(
-        provider=contrail.OpenSkyProvider(state_path=state),
-        transport=httpx.MockTransport(handler),
-    )
+    client = opensky.OpenSkyClient(state_path=state,
+                                   transport=httpx.MockTransport(handler))
 
     (rec,) = await client.fetch_global()
-    assert rec.kind == "opensky_global"
-    assert rec.meta["provider"] == "opensky"
+    assert rec.source == "opensky"
+    assert rec.kind == "contrail_global"      # adsblol과 같은 kind로 수렴
     assert "grant_type=client_credentials" in token_calls[0]
 
     recs = await client.fetch_regions()
-    assert recs[0].kind == "opensky_region_kr"
+    assert recs[0].kind == "contrail_region_kr"
     assert lamins == [None, "30.0", "30.0", "43.0", "25.0"]  # 전세계 무파라미터 + 프리셋 4개
     # 토큰은 상태 파일 캐시로 재사용 — 재발급 없음 (one-shot 간에도 이어짐)
     assert len(token_calls) == 1
     assert json.loads(state.read_text())["access_token"] == "TOK"
-
-    # 새 인스턴스(one-shot 재실행)도 상태 파일에서 토큰을 읽는다
-    fresh = contrail.OpenSkyProvider(state_path=state)
-    assert fresh._read_cached_token() == "TOK"
-
-    # 자격증명 파일은 소유자 전용 (0600) — 타 사용자 읽기 차단
+    # 자격증명 파일은 소유자 전용 (0600)
     assert (state.stat().st_mode & 0o777) == 0o600
 
+    fresh = opensky.OpenSkyClient(state_path=state)
+    assert fresh._read_cached_token() == "TOK"
 
-async def test_opensky_anonymous_fallback(monkeypatch):
+
+async def test_anonymous_fallback(monkeypatch):
     monkeypatch.delenv("DATALAKE_OPENSKY_CLIENT_ID", raising=False)
     monkeypatch.delenv("DATALAKE_OPENSKY_CLIENT_SECRET", raising=False)
 
@@ -93,27 +81,24 @@ async def test_opensky_anonymous_fallback(monkeypatch):
         assert "authorization" not in request.headers
         return httpx.Response(200, json={"states": []})
 
-    client = contrail.ContrailClient(
-        provider=contrail.OpenSkyProvider(),
-        transport=httpx.MockTransport(handler),
-    )
+    client = opensky.OpenSkyClient(transport=httpx.MockTransport(handler))
     (rec,) = await client.fetch_global()
     assert rec.payload == {"states": []}
 
 
 def test_transform_merges_providers_into_same_table():
-    readsb_rec = Record(source="contrail", kind="region_kr", fetched_at=1000.0,
-                        meta={"provider": "adsblol"},
+    readsb_rec = Record(source="adsblol", kind="contrail_region_kr",
+                        fetched_at=1000.0, meta={},
                         payload={"ac": [{"hex": "aaa", "lat": 37.0, "lon": 127.0}]})
-    opensky_rec = Record(source="contrail", kind="opensky_region_kr",
-                         fetched_at=1000.0, meta={"provider": "opensky"},
+    opensky_rec = Record(source="opensky", kind="contrail_region_kr",
+                         fetched_at=1000.0, meta={},
                          payload={"states": [_state(icao="bbb")]})
-    global_rec = Record(source="contrail", kind="opensky_global",
+    global_rec = Record(source="opensky", kind="contrail_global",
                         fetched_at=1000.0, meta={}, payload={"states": []})
 
     t1 = rows_for(readsb_rec)["contrail_positions"]
     t2 = rows_for(opensky_rec)["contrail_positions"]
     assert {r["icao24"] for r in t1} == {"aaa"}
     assert {r["icao24"] for r in t2} == {"bbb"}
-    assert set(t1[0]) == set(t2[0])       # 두 제공자가 같은 컬럼으로 수렴
-    assert rows_for(global_rec) == {}      # 전세계 스냅샷은 제외 (양 제공자)
+    assert set(t1[0]) == set(t2[0])       # 두 상류가 같은 컬럼으로 수렴
+    assert rows_for(global_rec) == {}      # 전세계 스냅샷은 제외 (양 상류)

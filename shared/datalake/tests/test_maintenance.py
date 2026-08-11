@@ -7,7 +7,7 @@ from datalake.core.maintenance import compress_old_partitions, prune_old_partiti
 TODAY = date(2026, 8, 11)
 
 
-def _make_part(root, dt: str, source="quake", kind="usgs_feed", hour="06"):
+def _make_part(root, dt: str, source="usgs_feed", kind="quake", hour="06"):
     d = root / "bronze" / source / kind / f"dt={dt}"
     d.mkdir(parents=True, exist_ok=True)
     path = d / f"part-{hour}.jsonl"
@@ -44,9 +44,9 @@ def test_prune_old_partitions(tmp_path):
     _make_part(tmp_path, "2026-08-09")   # 2일 전 — 보존
 
     assert prune_old_partitions(tmp_path, retention_days=0, today=TODAY) == 0  # 무제한
-    assert (tmp_path / "bronze/quake/usgs_feed/dt=2026-08-01").exists()
+    assert (tmp_path / "bronze/usgs_feed/quake/dt=2026-08-01").exists()
 
     n = prune_old_partitions(tmp_path, retention_days=7, today=TODAY)
     assert n == 1
-    assert not (tmp_path / "bronze/quake/usgs_feed/dt=2026-08-01").exists()
-    assert (tmp_path / "bronze/quake/usgs_feed/dt=2026-08-09").exists()
+    assert not (tmp_path / "bronze/usgs_feed/quake/dt=2026-08-01").exists()
+    assert (tmp_path / "bronze/usgs_feed/quake/dt=2026-08-09").exists()

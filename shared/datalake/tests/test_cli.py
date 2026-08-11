@@ -2,10 +2,10 @@ import asyncio
 import json
 
 from datalake.cli import _common
-from datalake.cli.wake import run_stream
+from datalake.cli.aisstream import run_stream
 from datalake.core.env import env_float, env_int, env_str
 from datalake.core.source import Record
-from datalake.sources.wake import WakeClient
+from datalake.sources.aisstream import AisStreamClient
 
 
 class ListSink:
@@ -81,10 +81,10 @@ async def test_run_stream_duration_bounded():
         return ws
 
     sink = ListSink()
-    client = WakeClient(api_key="K", preset="kr")
+    client = AisStreamClient(api_key="K", preset="kr")
     n = await run_stream(client, [sink], duration_s=0.3, flush_s=0.05,
                          connect=connect)
     assert n == 1
     assert len(sink.records) == 1
-    assert sink.records[0].kind == "ais"
+    assert sink.records[0].kind == "wake"
     assert json.loads(ws.sent[0])["APIKey"] == "K"  # 구독 프레임 전송됨

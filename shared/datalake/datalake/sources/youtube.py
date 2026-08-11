@@ -18,7 +18,7 @@ import httpx
 
 from ..core.source import Record
 
-log = logging.getLogger("datalake.trend")
+log = logging.getLogger("datalake.youtube")
 
 API_BASE = "https://www.googleapis.com/youtube/v3"
 KEY_ENV = "YT_API_KEY"
@@ -64,8 +64,8 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
-class TrendClient:
-    id = "trend"
+class YoutubeClient:
+    id = "youtube"
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
@@ -95,7 +95,7 @@ class TrendClient:
         return [
             Record(
                 source=self.id,
-                kind="trending",
+                kind="trend",
                 payload=resp.json(),
                 meta={
                     "region": REGION_CODE,
@@ -105,8 +105,8 @@ class TrendClient:
             )
         ]
 
-def build() -> TrendClient | None:
+def build() -> YoutubeClient | None:
     if not os.environ.get(KEY_ENV):
-        log.info("trend 비활성: %s 미설정", KEY_ENV)
+        log.info("youtube 비활성: %s 미설정", KEY_ENV)
         return None
-    return TrendClient()
+    return YoutubeClient()
