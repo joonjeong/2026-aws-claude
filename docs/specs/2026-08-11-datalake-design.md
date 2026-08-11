@@ -31,6 +31,7 @@ hub는 6개 모듈(quake·news·trend·market·contrail·wake)이 외부 소스�
 | market | yfinance(미) · pykrx(한) · Yahoo RSS(종목뉴스) · 시뮬레이션(호가/수급) | 없음 | 워밍 30s + 장중 TTL 45s / 장외 600s — `overview`, `quotes:us`, `quotes:kr` 3키만 아카이브 | pandas DataFrame → dict | 시세 행 `{symbol, name, price, change, change_pct, volume}`, overview `{indices, indicators}` | `snapshots` JSON (30일) |
 | contrail | adsb.lol re-api (기본, 무인증) / OpenSky(롤백 경로) | 없음 / OAuth2 | 전세계 600s + 프리셋 4개 병렬 60s (`CONTRAIL_GLOBAL/REGION_INTERVAL_S`) | readsb v2 `{"ac":[...]}` | `{id, callsign, ts, lon, lat, alt_m, on_ground, velocity_ms, track_deg, ...}` | `contrail_aircraft`(dim) + `contrail_positions`(fact, 7일, 개체당 300s 게이트) |
 | wake | AISStream WebSocket | `WAKE_AIS_KEY` (구독 프레임) | 상시 스트림 (폴링 아님) | AIS `PositionReport`/`ShipStaticData` JSON | `{id(MMSI), ts, lon, lat, sog_kn, cog_deg, heading_deg, name}` + 선박 dim | `wake_vessels`(dim) + `wake_positions`(fact, 7일, 트레일 게이트) |
+| flashpoint | GDELT v2 15분 export CSV (`lastupdate.txt` → `.export.CSV.zip`) | 없음 | 900s (`FLASHPOINT_POLL_S`), 같은 파일 재등장은 빈 배치 | 헤더 없는 탭 구분 61컬럼 CSV | CAMEO 루트 14~20 필터 + `{event_id, ts, code, root, quad, goldstein, mentions, articles, tone, actor1/2, lat, lon, country, source_url}` | `flashpoint_events` (14일) |
 
 LLM 파생물(브리핑·렌즈·AI 분석)은 전 모듈에서 버킷 캐시로만 존재하고 어디에도
 저장되지 않는다. 데이터레이크 1차 범위는 **외부 소스 원본**이며 LLM 파생물
@@ -131,6 +132,7 @@ Hive 스타일 파티션 + JSONL — 나중에 DuckDB/Athena/pandas로 바로 �
 | market | 30s 폴 + 장중 45s/장외 600s 실효 게이트 (hub `hours.py` 로직 이식) | `DATALAKE_MARKET_INTERVAL_S=30` |
 | contrail | 전세계 600s + 프리셋 4개 60s | `DATALAKE_CONTRAIL_GLOBAL_S=600`, `_REGION_S=60` |
 | wake | 상시 WebSocket (hub와 동일 프리셋 bbox 구독) | 주기 없음, `DATALAKE_FLUSH_S=10` |
+| flashpoint | 900s, 파일 단위 중복 스킵. raw는 필터 전 CSV 전문 보존(SQLite만 hub 동형 필터) | `DATALAKE_FLASHPOINT_INTERVAL_S=900` |
 
 ## 7. 리스크 / 확인 항목
 

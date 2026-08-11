@@ -38,7 +38,12 @@ data/                                  # DATALAKE_ROOT (gitignore)
 
 raw 존이 진실의 원천(source of truth). SQLite는 hub와 동형 스키마
 (quake_events, news_articles, trend dim/fact, contrail/wake dim/fact,
-market snapshots)의 조회 편의용 파생 존이며, `rebuild`로 언제든 재구축된다.
+flashpoint_events, market snapshots)의 조회 편의용 파생 존이며,
+`rebuild`로 언제든 재구축된다.
+
+flashpoint의 raw는 **필터 전 CSV 전문**을 보존한다 — hub는 CAMEO 루트
+14~20만 남기고 버리지만, 레이크에서는 전 이벤트가 남고 SQLite 파생 존에서만
+hub 동형 필터가 적용된다.
 
 ## 소스와 주기 (hub 기본값과 동일)
 
@@ -50,6 +55,7 @@ market snapshots)의 조회 편의용 파생 존이며, `rebuild`로 언제든 �
 | contrail | adsb.lol re-api | 전세계 600s + 프리셋 4개 60s (순차 1.1s 간격) | 항상 |
 | wake | AISStream WebSocket | 상시 스트림, 플러시 10s | `DATALAKE_AIS_KEY` |
 | market | yfinance·pykrx | 30s 틱 + 장중 45s/장외 600s 게이트 | `--extra market` 설치 |
+| flashpoint | GDELT v2 15분 export CSV | 900s (파일 단위 중복 스킵) | 항상 (무키) |
 
 ## env
 

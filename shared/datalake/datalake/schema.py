@@ -152,6 +152,35 @@ INSERT OR IGNORE INTO wake_positions
 VALUES (?, ?, ?, ?, ?, ?, ?)
 """
 
+FLASHPOINT_DDL = """
+CREATE TABLE IF NOT EXISTS flashpoint_events (
+  event_id  INTEGER PRIMARY KEY,
+  ts        REAL NOT NULL,
+  event_day TEXT,
+  code      TEXT,
+  root      TEXT,
+  quad      INTEGER,
+  goldstein REAL,
+  mentions  INTEGER,
+  articles  INTEGER,
+  tone      REAL,
+  actor1    TEXT,
+  actor2    TEXT,
+  lat       REAL NOT NULL,
+  lon       REAL NOT NULL,
+  country   TEXT,
+  source_url TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_flashpoint_events_ts ON flashpoint_events (ts);
+"""
+FLASHPOINT_TABLES = ["flashpoint_events"]
+FLASHPOINT_INSERT = """
+INSERT OR IGNORE INTO flashpoint_events
+  (event_id, ts, event_day, code, root, quad, goldstein, mentions,
+   articles, tone, actor1, actor2, lat, lon, country, source_url)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
 # module → (ddl, tables) — SqliteSink가 ensure_schema에 사용
 MODULES: dict[str, tuple[str, list[str]]] = {
     "quake": (QUAKE_DDL, QUAKE_TABLES),
@@ -159,4 +188,5 @@ MODULES: dict[str, tuple[str, list[str]]] = {
     "trend": (TREND_DDL, TREND_TABLES),
     "contrail": (CONTRAIL_DDL, CONTRAIL_TABLES),
     "wake": (WAKE_DDL, WAKE_TABLES),
+    "flashpoint": (FLASHPOINT_DDL, FLASHPOINT_TABLES),
 }

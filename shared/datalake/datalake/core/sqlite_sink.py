@@ -121,6 +121,19 @@ class SqliteSink:
                  r.fetched_at, r.fetched_at),
             ])
 
+    def _flashpoint(self, r: Record) -> None:
+        # 레이크 payload는 필터 전 CSV 전문 — hub 동형 필터(루트 14~20)를
+        # 여기서 적용해 hub flashpoint_events와 같은 모집단을 유지
+        from ..sources.flashpoint import normalize
+
+        self.archive.insert_rows(schema.FLASHPOINT_INSERT, [
+            (e["event_id"], e["ts"], e["event_day"], e["code"], e["root"],
+             e["quad"], e["goldstein"], e["mentions"], e["articles"], e["tone"],
+             e["actor1"], e["actor2"], e["lat"], e["lon"], e["country"],
+             e["source_url"])
+            for e in normalize(r.payload)
+        ])
+
     def _market(self, r: Record) -> None:
         # hub와 동일하게 snapshots(JSON). ts=fetched_at 존재검증으로 멱등화
         # (snapshots는 키 없는 append 테이블이라 OR IGNORE가 불가능).
@@ -138,6 +151,7 @@ class SqliteSink:
         "trend": _trend,
         "contrail": _contrail,
         "wake": _wake,
+        "flashpoint": _flashpoint,
         "market": _market,
     }
 
