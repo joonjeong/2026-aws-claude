@@ -5,8 +5,6 @@ export interface MenuItem {
   id: string;
   title: string;
   icon: string;
-  /** virtual:apps 레지스트리 밖의 셸 정적 메뉴 (예: Laboratory) — 백엔드 활성 검사 제외 */
-  static?: boolean;
 }
 
 interface Props {
@@ -26,7 +24,7 @@ export default function Sidebar({ items, activeId, navigate }: Props) {
       </button>
       <nav className="sidebar-nav">
         {items.map((it) => {
-          const enabled = it.static || isEnabled(it.id);
+          const enabled = isEnabled(it.id);
           return (
             <button
               key={it.id}

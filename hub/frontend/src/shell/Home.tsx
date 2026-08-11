@@ -1,45 +1,47 @@
-import type { AppDef } from "../apps/types";
 import { useModules } from "./useModules";
+import TickerTape from "./dashboard/TickerTape";
+import IndexStrip from "./dashboard/IndexStrip";
+import AISummaryPanel from "./dashboard/AISummaryPanel";
+import QuotePanel from "./dashboard/QuotePanel";
+import NewsPanel from "./dashboard/NewsPanel";
+import TrendPanel from "./dashboard/TrendPanel";
+import GeoPanel from "./dashboard/GeoPanel";
 
 interface Props {
-  apps: AppDef[];
   navigate: (p: string) => void;
 }
 
-export default function Home({ apps, navigate }: Props) {
-  const { isEnabled, statusLine } = useModules();
+/* 통합 모니터링 대시보드 — 증시 지표(티커+지수), 지정학 이슈(항공·물류·지진),
+   트렌드·뉴스를 한 화면에서 모니터링. 각 패널 제목은 해당 앱으로 이동한다. */
+export default function Home({ navigate }: Props) {
+  // 엄격 판정(isEnabledStrict): 모듈 목록 확정 전에 fetch가 나가
+  // 비활성 모듈에 404 재시도 버스트가 생기는 것을 막는다.
+  const { isEnabledStrict, ready } = useModules();
+
+  if (!ready) return <div className="shell-loading">모듈 확인 중…</div>;
 
   return (
-    <div className="home">
-      <header className="home-header">
-        <h1>
-          claude-lab<small>시스템 개요</small>
-        </h1>
-      </header>
-      <main className="home-grid">
-        {apps.length === 0 && (
-          <div className="home-empty">이 빌드에 포함된 앱이 없습니다 (VITE_APPS 확인)</div>
-        )}
-        {apps.map((a) => {
-          const enabled = isEnabled(a.id);
-          return (
-            <button
-              key={a.id}
-              className={`home-card${enabled ? "" : " disabled"}`}
-              onClick={() => enabled && navigate(`/${a.id}`)}
-              disabled={!enabled}
-            >
-              <div className="card-icon">{a.icon}</div>
-              <div className="card-title">{a.title}</div>
-              <div className="card-tagline">{a.tagline}</div>
-              <div className="card-status">
-                <span className={`dot${enabled ? "" : " off"}`} />
-                <span>{enabled ? statusLine(a.id) : "백엔드 모듈 비활성 (ENABLED_MODULES)"}</span>
-              </div>
-            </button>
-          );
-        })}
-      </main>
+    <div className="dash">
+      <TickerTape enabled={isEnabledStrict("market")} />
+      <div className="dash-body">
+        {/* 가운데 — 지수 스파크라인 / AI 시황 요약 / 마켓데스크 시세표 */}
+        <div className="dash-main">
+          <IndexStrip enabled={isEnabledStrict("market")} navigate={navigate} />
+          <AISummaryPanel enabled={isEnabledStrict("market")} />
+          <QuotePanel enabled={isEnabledStrict("market")} navigate={navigate} />
+        </div>
+        {/* 우측 레일 — 지정학 → 뉴스룸 → 트렌드 */}
+        <aside className="dash-side">
+          <GeoPanel
+            contrail={isEnabledStrict("contrail")}
+            wake={isEnabledStrict("wake")}
+            quake={isEnabledStrict("quake")}
+            navigate={navigate}
+          />
+          <NewsPanel enabled={isEnabledStrict("news")} navigate={navigate} />
+          <TrendPanel enabled={isEnabledStrict("trend")} navigate={navigate} />
+        </aside>
+      </div>
     </div>
   );
 }

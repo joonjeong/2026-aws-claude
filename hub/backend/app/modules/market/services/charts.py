@@ -82,6 +82,47 @@ async def fetch_chart(symbol: str, rng: str) -> dict[str, Any]:
     return {"symbol": symbol, "range": rng, "candles": candles}
 
 
+def _spark_sync() -> dict[str, Any]:
+    """1-month daily closes for every index — one bulk yfinance download.
+
+    KOSPI/KOSDAQ(^KS11/^KQ11)도 yfinance 티커라 US 인덱스와 같은 경로를 탄다.
+    per-symbol failure skips that index, never the batch (quotes와 동일 규약).
+    """
+    tickers = [t for t, _, _ in config.INDICES]
+    data = yf.download(
+        tickers=" ".join(tickers),
+        period="1mo",
+        interval="1d",
+        group_by="ticker",
+        threads=True,
+        progress=False,
+        auto_adjust=False,
+    )
+    out: list[dict[str, Any]] = []
+    for symbol, name, market in config.INDICES:
+        try:
+            df = data[symbol] if symbol in getattr(data.columns, "levels", [[]])[0] else data
+            closes = df["Close"].dropna()
+            if closes.empty:
+                raise ValueError("no close data")
+            out.append({
+                "symbol": symbol,
+                "name": name,
+                "market": market,
+                "points": [
+                    [ts.strftime("%Y-%m-%d"), round(float(v), 2)]
+                    for ts, v in closes.items()
+                ],
+            })
+        except Exception as exc:  # noqa: BLE001
+            log.warning("index spark %s skipped: %s", symbol, exc)
+    return {"indices": out}
+
+
+async def fetch_index_spark() -> dict[str, Any]:
+    return await asyncio.to_thread(_spark_sync)
+
+
 def _return_pct(closes: list[float], days: int) -> float | None:
     """Return over the last ~`days` calendar days using trading-day count."""
     if len(closes) < 2:

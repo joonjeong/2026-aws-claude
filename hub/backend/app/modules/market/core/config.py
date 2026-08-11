@@ -107,6 +107,9 @@ NEWS_MAX_ITEMS = 5
 # POST /ai/articles input cap (title + text + link, chars) — 413 if over
 ARTICLE_MAX_INPUT_CHARS = 6000
 
+# AI 시황 요약 버킷(초) — 같은 버킷의 재요청은 캐시 재생, Bedrock 재호출 없음
+SUMMARY_BUCKET_S = env_int("MARKET_SUMMARY_BUCKET", 300)
+
 # Bedrock (AI panel)
 BEDROCK_MODEL_ID = "global.anthropic.claude-sonnet-4-6"
 BEDROCK_REGION = "ap-northeast-2"

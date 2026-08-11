@@ -65,33 +65,168 @@ button { font: inherit; color: inherit; }
   .nav-item { justify-content: center; }
 }
 
-/* ── 시스템 홈 ────────────────────────────────────────────── */
-.home-header { padding: 24px 28px 0; }
-.home-header h1 { font-size: 1.25rem; }
-.home-header h1 small { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: .85rem; }
-.home-grid {
-  padding: 24px 28px 36px;
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;
-}
-.home-card {
-  display: block; background: var(--card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 22px; text-align: left; cursor: pointer;
-  box-shadow: var(--shadow); transition: transform .12s ease, border-color .12s ease;
-}
-.home-card:hover:not(.disabled) { transform: translateY(-2px); border-color: var(--accent); }
-.home-card.disabled { opacity: .55; cursor: not-allowed; }
-.card-icon { font-size: 2rem; }
-.card-title { font-size: 1.05rem; font-weight: 600; margin: 10px 0 4px; }
-.card-tagline { color: var(--muted); font-size: .85rem; line-height: 1.45; min-height: 2.5em; }
-.card-status { margin-top: 14px; font-size: .78rem; display: flex; gap: 6px; align-items: center; color: var(--muted); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
-.dot.off { background: var(--muted); }
-.home-empty { color: var(--muted); text-align: center; grid-column: 1 / -1; padding: 60px 0; }
+/* ── 홈: 통합 모니터링 대시보드 ───────────────────────────── */
+.dash { display: flex; flex-direction: column; min-height: 100vh; }
+.dash .dim { color: var(--muted); }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--muted); }
 
-/* ── Laboratory 빈 상태 ───────────────────────────────────── */
-.lab-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-height: 70vh; gap: 8px; color: var(--muted); text-align: center; padding: 20px;
+/* 1행 — 지표 티커 (우→좌 무한 스크롤) */
+.ticker-tape {
+  overflow: hidden; white-space: nowrap;
+  background: var(--card); border-bottom: 1px solid var(--border);
+  font-size: .85rem; line-height: 1;
 }
-.lab-icon { font-size: 3rem; }
-.lab-empty h2 { color: var(--text); }
+.ticker-track {
+  display: inline-flex; padding: 10px 0; will-change: transform;
+  animation: ticker-scroll 50s linear infinite;
+}
+.ticker-tape:hover .ticker-track { animation-play-state: paused; }
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+  .ticker-tape { overflow-x: auto; }
+}
+.ticker-item { display: inline-flex; align-items: baseline; gap: 6px; padding-right: 32px; }
+.ticker-item .t-label { color: var(--muted); }
+.ticker-item .t-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ticker-item .t-delta { font-variant-numeric: tabular-nums; }
+.ticker-empty { display: inline-block; padding: 10px 20px; color: var(--muted); font-size: .85rem; }
+
+/* 본문 2컬럼 — 가운데(지수+시세표) / 우측 레일(지정학·뉴스·트렌드) */
+.dash-body {
+  display: grid; gap: 14px; padding: 14px 20px 32px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+}
+@media (max-width: 1000px) { .dash-body { grid-template-columns: 1fr; } }
+.dash-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dash-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* 지수 타일 (가격 + 1개월 스파크라인) — 가운데 컬럼 상단 */
+.index-strip {
+  display: grid; gap: 12px;
+  /* 1440px 기준 가운데 컬럼(~800px)에 5개 지수가 한 줄로 들어가는 최소폭 */
+  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+}
+.index-tile {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; cursor: pointer; box-shadow: var(--shadow);
+  transition: border-color .12s ease;
+}
+.index-tile:hover { border-color: var(--accent); }
+.ix-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ix-name { font-size: .82rem; font-weight: 600; }
+.ix-market { font-size: .68rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
+.ix-price { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ix-delta { font-size: .78rem; font-variant-numeric: tabular-nums; }
+.sparkline { width: 100%; height: 34px; margin-top: 4px; }
+.sparkline-empty { height: 34px; margin-top: 4px; font-size: .72rem; color: var(--muted); display: flex; align-items: center; }
+.ix-month { font-size: .72rem; }
+
+.panel {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 16px; box-shadow: var(--shadow); min-width: 0;
+}
+.panel-title {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  font-size: .95rem; font-weight: 700; padding: 0 0 10px;
+}
+.panel-arrow { color: var(--muted); font-weight: 400; }
+.panel-title:hover .panel-arrow { color: var(--accent); }
+.panel-empty { color: var(--muted); font-size: .85rem; padding: 12px 0; }
+.panel-foot { color: var(--muted); font-size: .75rem; padding-top: 10px; border-top: 1px solid var(--border); margin-top: 10px; }
+
+/* 뉴스 패널 */
+.news-list { list-style: none; padding: 0; display: flex; flex-direction: column; }
+.news-list li + li { border-top: 1px solid var(--border); }
+.news-list a { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; text-decoration: none; color: inherit; }
+.news-list a:hover .n-title { color: var(--accent); }
+.n-title { font-size: .85rem; line-height: 1.4; }
+.n-meta { font-size: .72rem; color: var(--muted); }
+
+/* 트렌드 패널 */
+.trend-list { list-style: none; padding: 0; display: flex; flex-direction: column; }
+.trend-list li { display: flex; gap: 10px; padding: 7px 0; align-items: baseline; }
+.trend-list li + li { border-top: 1px solid var(--border); }
+.trend-list .rank { flex: none; width: 1.4em; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.trend-list .t-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.trend-list .t-title {
+  font-size: .85rem; line-height: 1.4; overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.trend-list .t-meta { font-size: .72rem; color: var(--muted); }
+.badge-new {
+  font-style: normal; font-size: .62rem; font-weight: 700; color: var(--bad);
+  border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 6px;
+}
+
+/* AI 시황 요약 패널 */
+.ai-summary .as-label { cursor: default; }
+.ai-sum-meta { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; }
+.ai-sum-time { font-size: .72rem; color: var(--muted); }
+.ai-sum-refresh {
+  border: 1px solid var(--border); background: none; border-radius: 6px;
+  padding: 3px 10px; font-size: .78rem; cursor: pointer; color: var(--muted);
+}
+.ai-sum-refresh:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ai-sum-refresh:disabled { opacity: .5; cursor: not-allowed; }
+.ai-sum-body { font-size: .85rem; line-height: 1.6; }
+.ai-sum-body .md-h2 { font-size: .82rem; margin: 10px 0 4px; color: var(--accent); }
+.ai-sum-body .md-h3 { font-size: .78rem; margin: 8px 0 3px; }
+.ai-sum-body p { margin: 4px 0; }
+.ai-sum-body ul, .ai-sum-body ol { margin: 4px 0; padding-left: 18px; }
+.ai-sum-body li { margin: 2px 0; }
+.ai-sum-body code {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  padding: 0 4px; font-size: .9em;
+}
+
+/* 마켓데스크 시세표 패널 */
+.quote-head { display: flex; justify-content: space-between; align-items: center; }
+.quote-head .panel-title { width: auto; }
+.quote-tabs { display: flex; gap: 4px; padding-bottom: 10px; }
+.quote-tabs button {
+  border: 1px solid var(--border); background: none; border-radius: 6px;
+  padding: 3px 12px; font-size: .78rem; cursor: pointer; color: var(--muted);
+}
+.quote-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.quote-scroll { overflow-x: auto; }
+.dash-quote-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.dash-quote-table th {
+  text-align: left; color: var(--muted); font-weight: 500; font-size: .72rem;
+  padding: 6px 8px; border-bottom: 1px solid var(--border);
+}
+.dash-quote-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.dash-quote-table tbody tr { cursor: pointer; }
+.dash-quote-table tbody tr:hover { background: var(--bg); }
+.dash-quote-table tbody tr:last-child td { border-bottom: 0; }
+.dash-quote-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dash-quote-table .sym { font-weight: 600; white-space: nowrap; }
+.dash-quote-table .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.dash-quote-table .dim { color: var(--muted); }
+
+/* 지정학 패널 */
+.geo-row { padding: 8px 0; }
+.geo-row + .geo-row { border-top: 1px solid var(--border); }
+.geo-head {
+  display: flex; justify-content: space-between; align-items: baseline; width: 100%;
+  border: 0; background: none; cursor: pointer; text-align: left;
+  font-size: .85rem; font-weight: 600; padding: 0 0 4px;
+}
+.geo-head:hover { color: var(--accent); }
+.geo-status { font-size: .7rem; font-weight: 400; color: var(--muted); }
+.geo-main { font-size: .85rem; }
+.geo-main b { font-variant-numeric: tabular-nums; }
+.geo-sub { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .74rem; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.geo-quakes { list-style: none; padding: 6px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.geo-quakes li { display: flex; gap: 8px; align-items: baseline; font-size: .78rem; min-width: 0; }
+.geo-quakes .mag { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+.geo-quakes .mag.strong { color: var(--bad); }
+.geo-quakes .place { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.geo-quakes .when { flex: none; margin-left: auto; color: var(--muted); font-size: .72rem; }
