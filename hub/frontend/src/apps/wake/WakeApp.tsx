@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./wake.css";
 import GeoCanvas, { project, bboxZoomK, type BBox } from "../../components/GeoCanvas";
 
@@ -65,6 +65,7 @@ export default function WakeApp() {
   const [selected, setSelected] = useState<string | null>(null);
   const [historyPts, setHistoryPts] = useState<[number, number, number][]>([]);
   const [brief, setBrief] = useState<{ text?: string; loading?: boolean; error?: string }>({});
+  const selectedRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +88,7 @@ export default function WakeApp() {
   const switchPreset = useCallback(async (id: string) => {
     setActive(id);
     setSelected(null);
+    selectedRef.current = null;
     setHistoryPts([]);
     await fetch(`${API}/preset`, {
       method: "POST",
@@ -98,10 +100,13 @@ export default function WakeApp() {
 
   const selectVessel = useCallback(async (id: string) => {
     setSelected(id);
+    selectedRef.current = id;
     try {
       const h = await (await fetch(`${API}/history?id=${encodeURIComponent(id)}&hours=24`)).json();
-      setHistoryPts(h.points ?? []);
-    } catch { setHistoryPts([]); }
+      if (selectedRef.current === id) setHistoryPts(h.points ?? []);
+    } catch {
+      if (selectedRef.current === id) setHistoryPts([]);
+    }
   }, []);
 
   const loadBrief = useCallback(async () => {

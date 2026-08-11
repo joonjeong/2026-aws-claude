@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./contrail.css";
 import GeoCanvas, { project, bboxZoomK, type BBox } from "../../components/GeoCanvas";
 
@@ -49,6 +49,7 @@ export default function ContrailApp() {
   const [selected, setSelected] = useState<string | null>(null);
   const [historyPts, setHistoryPts] = useState<[number, number, number][]>([]);
   const [brief, setBrief] = useState<{ text?: string; loading?: boolean; error?: string }>({});
+  const selectedRef = useRef<string | null>(null);
 
   const loadWorld = useCallback(async () => {
     try { setWorld(await (await fetch(`${API}/global`)).json()); } catch { /* retry next tick */ }
@@ -72,6 +73,7 @@ export default function ContrailApp() {
   const switchView = useCallback(async (id: string) => {
     setView(id);
     setSelected(null);
+    selectedRef.current = null;
     setHistoryPts([]);
     if (id !== "world") {
       await fetch(`${API}/preset`, {
@@ -85,10 +87,13 @@ export default function ContrailApp() {
 
   const selectFlight = useCallback(async (id: string) => {
     setSelected(id);
+    selectedRef.current = id;
     try {
       const h = await (await fetch(`${API}/history?id=${encodeURIComponent(id)}&hours=24`)).json();
-      setHistoryPts(h.points ?? []);
-    } catch { setHistoryPts([]); }
+      if (selectedRef.current === id) setHistoryPts(h.points ?? []);
+    } catch {
+      if (selectedRef.current === id) setHistoryPts([]);
+    }
   }, []);
 
   const loadBrief = useCallback(async () => {
