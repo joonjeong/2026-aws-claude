@@ -12,7 +12,7 @@ import logging
 log = logging.getLogger("datalake.sources")
 
 # 구현된 소스만 나열 (태스크 진행에 따라 추가)
-SOURCE_MODULES: list[str] = ["quake", "news", "trend", "contrail"]
+SOURCE_MODULES: list[str] = ["quake", "news", "trend", "contrail", "wake"]
 
 
 def build_sources(selected: list[str] | None = None) -> tuple[list, list]:
