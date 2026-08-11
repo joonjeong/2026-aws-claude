@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
-const ALL_APPS = ["quake", "news", "trend", "market", "wake"];
+const ALL_APPS = ["quake", "news", "trend", "market", "contrail", "wake"];
 
 /** virtual:apps — VITE_APPS(쉼표 구분)로 선택된 앱만 정적 import하는
  *  레지스트리를 생성한다. 미선택 앱은 import 그래프에서 빠져 번들에 포함되지 않는다. */

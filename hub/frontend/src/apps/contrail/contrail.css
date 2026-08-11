@@ -1,0 +1,40 @@
+/* Contrail Watch — 모든 선택자는 .app-contrail 하위 네임스페이스. */
+
+.app-contrail { --map-bg: #e8eef4; --land: #9aa7b4; }
+[data-theme="dark"] .app-contrail { --map-bg: #0b111c; --land: #3d4757; }
+
+.app-contrail .wrap { padding: 16px 24px 48px; }
+.app-contrail .head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.app-contrail .head h1 { font-size: 20px; margin: 0; }
+.app-contrail .presets button {
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  border-radius: 999px; padding: 4px 12px; margin-right: 6px; cursor: pointer;
+}
+.app-contrail .presets button.on { border-color: var(--accent); color: var(--accent); }
+.app-contrail .stats { display: flex; gap: 16px; margin: 12px 0; color: var(--muted); }
+.app-contrail .stats b { color: var(--text); }
+.app-contrail .map {
+  width: 100%; background: var(--map-bg);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.app-contrail .map .geo-ocean { fill: var(--map-bg); }
+.app-contrail .map .geo-land { fill: none; stroke: var(--land); stroke-width: 1; }
+.app-contrail .plane { cursor: pointer; }
+.app-contrail .plane.selected polygon { stroke: var(--accent); stroke-width: 2; }
+.app-contrail .trail { fill: none; stroke: var(--accent); stroke-width: 1; opacity: .45; }
+.app-contrail .trail.selected { opacity: 1; stroke-width: 1.5; }
+.app-contrail .trail.history { stroke-dasharray: 4 3; opacity: .8; }
+.app-contrail .brief { margin: 16px 0; }
+.app-contrail .brief button {
+  border: 1px solid var(--accent); background: var(--card); color: var(--accent);
+  border-radius: 6px; padding: 6px 14px; cursor: pointer;
+}
+.app-contrail .brief p { background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; box-shadow: var(--shadow); white-space: pre-wrap; }
+.app-contrail .brief .error { color: var(--bad); }
+.app-contrail .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.app-contrail .tbl th, .app-contrail .tbl td {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
+}
+.app-contrail .tbl tr { cursor: pointer; }
+.app-contrail .tbl tr.on td { color: var(--accent); }
