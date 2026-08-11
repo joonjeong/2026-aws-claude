@@ -20,14 +20,11 @@ from typing import Any
 import feedparser
 import httpx
 
-from labkit.config import env_float
-
-from ..core.source import Job, Record
+from ..core.source import Record
 
 log = logging.getLogger("datalake.news")
 
-INTERVAL_S = env_float("DATALAKE_NEWS_INTERVAL_S", 120.0)  # hub NEWSROOM_POLL_INTERVAL_S
-TIMEOUT_S = 20.0
+TIMEOUT_S = 20.0  # 권장 스케줄: 매체당 120s (hub NEWSROOM_POLL_INTERVAL_S)
 FETCH_LATEST_N = 15
 SUMMARY_MAX_CHARS = 300
 
@@ -125,13 +122,13 @@ def normalize(feed_id: str, xml_text: str | bytes) -> list[dict]:
     return articles[:FETCH_LATEST_N]
 
 
-class NewsSource:
+class NewsClient:
     id = "news"
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
 
-    async def _fetch_feed(self, feed: dict) -> list[Record]:
+    async def fetch_feed(self, feed: dict) -> list[Record]:
         started = time.monotonic()
         user_agent = feed.get("user_agent") or DEFAULT_UA
         async with httpx.AsyncClient(
@@ -153,17 +150,20 @@ class NewsSource:
             )
         ]
 
-    def jobs(self) -> list[Job]:
-        return [
-            Job(
-                name=f"news-{feed['id']}",
-                interval_s=INTERVAL_S,
-                # 기본 인자 바인딩 — 루프 변수 캡처 함정 방지
-                fetch=(lambda _feed=feed: self._fetch_feed(_feed)),
-            )
-            for feed in FEEDS
-        ]
+    async def fetch(self, feed_ids: list[str] | None = None) -> list[Record]:
+        """선택한(기본 전체) 매체를 순차 수집 — 매체 단위 실패 격리."""
+        selected = ({f.strip() for f in feed_ids} if feed_ids else None)
+        records: list[Record] = []
+        for feed in FEEDS:
+            if selected is not None and feed["id"] not in selected:
+                continue
+            try:
+                records.extend(await self.fetch_feed(feed))
+            except Exception as exc:  # 한 매체 실패가 나머지를 못 죽이게
+                log.warning("[%s] fetch failed: %s: %s",
+                            feed["id"], type(exc).__name__, exc)
+        return records
 
 
-def build() -> NewsSource:
-    return NewsSource()
+def build() -> NewsClient:
+    return NewsClient()

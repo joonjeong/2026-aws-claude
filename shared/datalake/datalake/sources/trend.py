@@ -16,9 +16,7 @@ from typing import Any
 
 import httpx
 
-from labkit.config import env_float
-
-from ..core.source import Job, Record
+from ..core.source import Record
 
 log = logging.getLogger("datalake.trend")
 
@@ -26,8 +24,7 @@ API_BASE = "https://www.googleapis.com/youtube/v3"
 KEY_ENV = "YT_API_KEY"
 REGION_CODE = "KR"
 MAX_RESULTS = 30
-INTERVAL_S = env_float("DATALAKE_TREND_INTERVAL_S", 60.0)  # hub POLL_INTERVAL_S
-TIMEOUT_S = 15.0
+TIMEOUT_S = 15.0  # 권장 스케줄: 60s (hub POLL_INTERVAL_S)
 
 
 def _safe_int(value: Any) -> int:
@@ -67,13 +64,13 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
-class TrendSource:
+class TrendClient:
     id = "trend"
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
 
-    async def _fetch(self) -> list[Record]:
+    async def fetch(self) -> list[Record]:
         api_key = os.environ.get(KEY_ENV)
         if not api_key:
             raise RuntimeError(f"{KEY_ENV} is not set")
@@ -108,12 +105,8 @@ class TrendSource:
             )
         ]
 
-    def jobs(self) -> list[Job]:
-        return [Job("trend-youtube", INTERVAL_S, self._fetch)]
-
-
-def build() -> TrendSource | None:
+def build() -> TrendClient | None:
     if not os.environ.get(KEY_ENV):
         log.info("trend 비활성: %s 미설정", KEY_ENV)
         return None
-    return TrendSource()
+    return TrendClient()

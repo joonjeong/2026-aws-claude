@@ -37,7 +37,7 @@ def test_normalize_readsb_units_and_defense():
     assert g["ts"] == 1000.0  # seen_pos 없음 → now
 
 
-async def test_global_and_region_jobs(monkeypatch):
+async def test_global_and_region_fetch(monkeypatch):
     monkeypatch.setattr(contrail, "REGION_SPACING_S", 0.0)  # 테스트에선 대기 생략
     calls = []
 
@@ -46,16 +46,13 @@ async def test_global_and_region_jobs(monkeypatch):
         assert request.headers["user-agent"].startswith("DataLake/0.1")
         return httpx.Response(200, json={"ac": [{"hex": "a", "lat": 1, "lon": 2}]})
 
-    src = contrail.ContrailSource(transport=httpx.MockTransport(handler))
-    jobs = {j.name: j for j in src.jobs()}
-    assert jobs["contrail-global"].interval_s == 600.0  # hub adsblol 기본값
-    assert jobs["contrail-regions"].interval_s == 60.0
+    client = contrail.ContrailClient(transport=httpx.MockTransport(handler))
 
-    (rec,) = await jobs["contrail-global"].fetch()
+    (rec,) = await client.fetch_global()
     assert rec.kind == "global"
     assert "box=-90.0,90.0,-180.0,180.0&jv2" in calls[0]
 
-    recs = await jobs["contrail-regions"].fetch()
+    recs = await client.fetch_regions()
     assert [r.kind for r in recs] == [
         "region_kr", "region_japan", "region_europe", "region_us-east"]
     assert all(r.source == "contrail" for r in recs)

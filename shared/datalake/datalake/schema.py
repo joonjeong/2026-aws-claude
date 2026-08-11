@@ -1,7 +1,7 @@
 """SQLite 옵션 존 스키마 — hub 각 모듈 schema.py와 동형 (이식, import 금지).
 
 hub DB(lab.db)와 조인·비교가 쉽도록 테이블명·컬럼을 그대로 유지한다.
-market은 hub와 동일하게 snapshots(JSON) 사용 — labkit Archive 기본 스키마.
+market은 hub와 동일하게 snapshots(JSON) 사용 (DDL은 core/sqlite_sink.py).
 """
 
 QUAKE_DDL = """

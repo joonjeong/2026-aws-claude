@@ -45,12 +45,8 @@ async def test_fetch_record_envelope():
         assert "earthquake.usgs.gov" in str(request.url)
         return httpx.Response(200, json={"features": [_feature()]})
 
-    src = quake.QuakeSource(transport=httpx.MockTransport(handler))
-    (job,) = src.jobs()
-    assert job.name == "quake-usgs"
-    assert job.interval_s == 60.0  # hub QUAKE_POLL_INTERVAL_S와 동일
-
-    (rec,) = await job.fetch()
+    client = quake.QuakeClient(transport=httpx.MockTransport(handler))
+    (rec,) = await client.fetch()
     assert rec.source == "quake"
     assert rec.kind == "usgs_feed"
     assert rec.payload["features"][0]["id"] == "us100"
@@ -58,6 +54,6 @@ async def test_fetch_record_envelope():
     assert "url" in rec.meta
 
 
-def test_build_returns_poll_source():
-    src = quake.build()
-    assert src is not None and hasattr(src, "jobs")
+def test_build_returns_client():
+    client = quake.build()
+    assert client is not None and hasattr(client, "fetch")

@@ -1,13 +1,13 @@
-"""market — 미·한 시세 (yfinance·pykrx, optional extra). hub market과 동일 실효 주기.
+"""market — 미·한 시세 클라이언트 (yfinance·pykrx, optional extra).
 
 이식 원본: hub/backend/app/modules/market/{core/config.py, services/us.py,
 services/kr.py}. import 금지.
 
-- 30s 워밍 틱 + kind별 TTL 게이트(장중 45s/장외 600s) → 실효 호출 빈도가
-  hub와 동일 (비공식 라이브러리 호출량 배려, 설계 §7.3)
 - kinds: overview(지수 5+지표 11), quotes_us(활성 20), quotes_kr(활성 20)
 - payload는 hub가 snapshots에 남기는 것과 동형의 시세 행 구조
 - yfinance/pykrx 미설치(base install) 시 build()가 None
+- 케이던스는 오케스트레이터 소유 — hub 실효 주기(장중 45s/장외 600s)를
+  Temporal 스케줄로 재현할 것 (비공식 라이브러리 호출량 배려, README 참조)
 """
 
 from __future__ import annotations
@@ -15,18 +15,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-import time
 from datetime import date, timedelta
 from typing import Any, Awaitable, Callable
 
-from labkit.config import env_float, env_int
-
-from ..core.source import Job, Record
-from . import market_hours
+from ..core.env import env_int
+from ..core.source import Record
 
 log = logging.getLogger("datalake.market")
 
-WARM_INTERVAL_S = env_float("DATALAKE_MARKET_INTERVAL_S", 30.0)  # hub MARKET_WARM_INTERVAL
+KINDS = ("overview", "quotes_us", "quotes_kr")
 _KR_CONCURRENCY = 8
 
 # hub market core/config.py 값 복사 — US 50 + KR 50, 목록 순서 고정
@@ -188,8 +185,8 @@ async def fetch_kr_quotes() -> list[dict[str, Any]]:
     return rows
 
 
-# ── 소스 ──────────────────────────────────────────────────────────────
-class MarketSource:
+# ── 클라이언트 ────────────────────────────────────────────────────────
+class MarketClient:
     id = "market"
 
     def __init__(
@@ -201,33 +198,25 @@ class MarketSource:
             "quotes_us": fetch_us_quotes,
             "quotes_kr": fetch_kr_quotes,
         }
-        self._last: dict[str, float] = {}
 
-    async def _tick(self) -> list[Record]:
+    async def fetch(self, kinds: list[str] | None = None) -> list[Record]:
+        """요청한(기본 전체) kind를 1회 수집 — kind 단위 실패 격리."""
         records: list[Record] = []
-        for kind, fetch in self._fetchers.items():
-            ttl = market_hours.ttl_for(kind)
-            now = time.time()
-            if now - self._last.get(kind, 0.0) < ttl:
-                continue
+        for kind in (kinds or list(self._fetchers)):
+            fetch = self._fetchers.get(kind)
+            if fetch is None:
+                raise ValueError(f"알 수 없는 kind: {kind} ({list(self._fetchers)})")
             try:
                 payload = await fetch()
-            except Exception as exc:  # kind 단위 격리 — 다음 틱에 재시도
+            except Exception as exc:  # kind 단위 격리
                 log.warning("market %s fetch failed: %s: %s",
                             kind, type(exc).__name__, exc)
                 continue
-            self._last[kind] = now
-            records.append(Record(
-                source=self.id, kind=kind, payload=payload,
-                meta={"ttl_s": ttl},
-            ))
+            records.append(Record(source=self.id, kind=kind, payload=payload))
         return records
 
-    def jobs(self) -> list[Job]:
-        return [Job("market-warm", WARM_INTERVAL_S, self._tick)]
 
-
-def build() -> MarketSource | None:
+def build() -> MarketClient | None:
     try:
         import pykrx  # noqa: F401
         import yfinance  # noqa: F401
@@ -235,4 +224,4 @@ def build() -> MarketSource | None:
         log.info("market 비활성: market extra 미설치 "
                  "(uv sync --extra market 후 사용 가능)")
         return None
-    return MarketSource()
+    return MarketClient()

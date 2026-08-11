@@ -1,11 +1,14 @@
-"""독립성 게이트 — datalake는 hub 코드를 절대 import하지 않는다 (설계 §4)."""
+"""독립성 게이트 — datalake는 hub 코드도 labkit도 import하지 않는다.
+
+(2026-08-11 사용자 결정: labkit 결합 제거 — 완전 독립 패키지)
+"""
 
 import ast
 from pathlib import Path
 
 import datalake
 
-FORBIDDEN = ("app", "hub")
+FORBIDDEN = ("app", "hub", "labkit")
 PKG_ROOT = Path(datalake.__file__).resolve().parent
 
 

@@ -13,8 +13,7 @@ from __future__ import annotations
 import logging
 import os
 
-from labkit.config import env_str
-
+from ..core.env import env_str
 from ..core.source import Record
 
 log = logging.getLogger("datalake.wake")
@@ -87,7 +86,7 @@ def normalize_static(msg: dict) -> tuple[str, dict] | None:
     }
 
 
-class WakeSource:
+class WakeClient:
     id = "wake"
     url = STREAM_URL
 
@@ -113,9 +112,9 @@ class WakeSource:
                        meta={"preset": self._preset})]
 
 
-def build() -> WakeSource | None:
+def build(preset: str | None = None) -> WakeClient | None:
     api_key = os.environ.get(KEY_ENV)
     if not api_key:
         log.info("wake 비활성: %s 미설정 (hub 키 공유 금지 — 전용 키 필요)", KEY_ENV)
         return None
-    return WakeSource(api_key=api_key)
+    return WakeClient(api_key=api_key, preset=preset)

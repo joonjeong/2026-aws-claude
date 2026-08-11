@@ -80,7 +80,7 @@ def _market_rec():
 
 
 def _count(sink, table):
-    return sink.archive.query(f"SELECT COUNT(*) FROM {table}")[0][0]
+    return sink.db.query(f"SELECT COUNT(*) FROM {table}")[0][0]
 
 
 def test_idempotent_writes_all_sources(tmp_path):
@@ -101,12 +101,12 @@ def test_idempotent_writes_all_sources(tmp_path):
     assert _count(sink, "snapshots") == 1  # market — ts 동일 재기록은 스킵
 
     # trend rank = 배열 순서, ts = 주기 버킷 정렬값
-    rows = sink.archive.query(
+    rows = sink.db.query(
         "SELECT video_id, rank FROM trend_video_stats ORDER BY rank")
     assert rows == [("v1", 1), ("v2", 2)]
 
     # wake dim은 static 정보가 병합돼 있어야 함 (COALESCE 업서트)
-    (vessel,) = sink.archive.query(
+    (vessel,) = sink.db.query(
         "SELECT mmsi, name, ship_type, callsign FROM wake_vessels")
     assert vessel == ("440000001", "HANARA", "화물", "AB1")
 

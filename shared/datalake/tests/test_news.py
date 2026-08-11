@@ -52,26 +52,31 @@ def test_normalize_summary_cap_300():
     assert len(rows[0]["summary"]) == 300
 
 
-async def test_jobs_one_per_feed_and_ua():
+async def test_fetch_selected_feeds_and_ua():
     seen_ua = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen_ua[str(request.url)] = request.headers["user-agent"]
         return httpx.Response(200, text=_rss(_item()))
 
-    src = news.NewsSource(transport=httpx.MockTransport(handler))
-    jobs = src.jobs()
-    assert len(jobs) == 15
-    assert all(j.interval_s == 120.0 for j in jobs)  # hub NEWSROOM_POLL_INTERVAL_S
+    client = news.NewsClient(transport=httpx.MockTransport(handler))
+    records = await client.fetch(feed_ids=["bbc", "wapo"])
+    assert [r.kind for r in records] == ["bbc", "wapo"]
+    assert all(r.source == "news" for r in records)
+    assert records[0].payload.startswith("<?xml")
+    assert records[0].meta["status"] == 200
 
-    by_name = {j.name: j for j in jobs}
-    (rec,) = await by_name["news-bbc"].fetch()
-    assert rec.source == "news" and rec.kind == "bbc"
-    assert rec.payload.startswith("<?xml")
-    assert rec.meta["status"] == 200
-
-    (rec_wapo,) = await by_name["news-wapo"].fetch()
-    assert rec_wapo.kind == "wapo"
     uas = list(seen_ua.values())
     assert any(ua.startswith("DataLake/0.1") for ua in uas)
-    assert any(ua.startswith("Mozilla/5.0") for ua in uas)
+    assert any(ua.startswith("Mozilla/5.0") for ua in uas)  # wapo 오버라이드
+
+
+async def test_fetch_isolates_feed_failure():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "bbci" in str(request.url):
+            return httpx.Response(503)
+        return httpx.Response(200, text=_rss(_item()))
+
+    client = news.NewsClient(transport=httpx.MockTransport(handler))
+    records = await client.fetch(feed_ids=["bbc", "npr"])
+    assert [r.kind for r in records] == ["npr"]  # bbc 실패가 npr을 못 죽임

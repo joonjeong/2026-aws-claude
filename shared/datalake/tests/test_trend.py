@@ -45,12 +45,8 @@ async def test_fetch_key_never_leaks(monkeypatch):
         assert request.url.params["maxResults"] == "30"
         return httpx.Response(200, json={"items": [_item()]})
 
-    src = trend.TrendSource(transport=httpx.MockTransport(handler))
-    (job,) = src.jobs()
-    assert job.name == "trend-youtube"
-    assert job.interval_s == 60.0  # hub POLL_INTERVAL_S
-
-    (rec,) = await job.fetch()
+    client = trend.TrendClient(transport=httpx.MockTransport(handler))
+    (rec,) = await client.fetch()
     assert rec.source == "trend" and rec.kind == "trending"
     assert rec.payload["items"][0]["id"] == "v1"
     assert "SECRETKEY" not in json.dumps(rec.meta)  # 키 비노출
@@ -62,9 +58,8 @@ async def test_fetch_upstream_error_no_body_in_exception(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, json={"error": "quota SECRET details"})
 
-    src = trend.TrendSource(transport=httpx.MockTransport(handler))
-    (job,) = src.jobs()
+    client = trend.TrendClient(transport=httpx.MockTransport(handler))
     with pytest.raises(RuntimeError) as exc_info:
-        await job.fetch()
+        await client.fetch()
     assert "403" in str(exc_info.value)
     assert "SECRET" not in str(exc_info.value)  # 본문은 로그로만

@@ -77,7 +77,7 @@ def test_normalize_blocks_bad_url_scheme():
     assert e["source_url"] is None
 
 
-async def test_fetch_dedups_same_file():
+async def test_fetch_dedups_same_file_across_runs(tmp_path):
     csv_zip = _zip_bytes(_row() + "\n")
     calls = []
 
@@ -87,21 +87,26 @@ async def test_fetch_dedups_same_file():
             return httpx.Response(200, text=LASTUPDATE)
         return httpx.Response(200, content=csv_zip)
 
-    src = flashpoint.FlashpointSource(transport=httpx.MockTransport(handler))
-    (job,) = src.jobs()
-    assert job.name == "flashpoint-gdelt"
-    assert job.interval_s == 900.0  # hub FLASHPOINT_POLL_S
+    state = tmp_path / "state" / "flashpoint_last_url"
+    transport = httpx.MockTransport(handler)
 
-    (rec,) = await job.fetch()
+    client = flashpoint.FlashpointClient(transport=transport, state_path=state)
+    (rec,) = await client.fetch()
     assert rec.source == "flashpoint" and rec.kind == "export"
     assert rec.payload.startswith("1001\t")  # 전체 CSV 원문 (필터 전)
     assert rec.meta["url"].endswith(".export.CSV.zip")
     assert rec.meta["lines"] == 1
 
-    # 같은 파일 URL 재등장(15분 미도래) → 빈 배치, zip 재다운로드 없음
+    # 같은 파일 URL 재등장 → 빈 배치, zip 재다운로드 없음 —
+    # 새 인스턴스(one-shot 재실행)에서도 상태 파일로 이어진다
+    fresh = flashpoint.FlashpointClient(transport=transport, state_path=state)
     n_before = len(calls)
-    assert await job.fetch() == []
+    assert await fresh.fetch() == []
     assert len(calls) == n_before + 1  # lastupdate.txt만 재조회
+
+    # --force는 상태를 무시하고 재수집
+    (again,) = await fresh.fetch(force=True)
+    assert again.kind == "export"
 
 
 async def test_fetch_zip_too_large():
@@ -110,10 +115,9 @@ async def test_fetch_zip_too_large():
             return httpx.Response(200, text=LASTUPDATE)
         return httpx.Response(200, content=b"x" * (flashpoint.MAX_ZIP_BYTES + 1))
 
-    src = flashpoint.FlashpointSource(transport=httpx.MockTransport(handler))
-    (job,) = src.jobs()
+    client = flashpoint.FlashpointClient(transport=httpx.MockTransport(handler))
     with pytest.raises(ValueError, match="zip too large"):
-        await job.fetch()
+        await client.fetch()
 
 
 def test_sqlite_sink_flashpoint(tmp_path):
@@ -126,6 +130,6 @@ def test_sqlite_sink_flashpoint(tmp_path):
     sink = SqliteSink(tmp_path / "lake.db")
     sink.write([rec])
     sink.write([rec])  # 멱등
-    rows = sink.archive.query(
+    rows = sink.db.query(
         "SELECT event_id, root, country FROM flashpoint_events")
     assert rows == [(1001, "19", "IR")]  # 루트 필터 밖(01)은 제외 (hub 동형)

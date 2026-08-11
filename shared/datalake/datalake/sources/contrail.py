@@ -17,17 +17,15 @@ import time
 
 import httpx
 
-from labkit.config import env_float, env_str
-
-from ..core.source import Job, Record
+from ..core.env import env_float, env_str
+from ..core.source import Record
 
 log = logging.getLogger("datalake.contrail")
 
 BASE_URL = env_str("DATALAKE_CONTRAIL_URL", "https://re-api.adsb.lol/")
-GLOBAL_INTERVAL_S = env_float("DATALAKE_CONTRAIL_GLOBAL_S", 600.0)
-REGION_INTERVAL_S = env_float("DATALAKE_CONTRAIL_REGION_S", 60.0)
 TIMEOUT_S = env_float("DATALAKE_CONTRAIL_TIMEOUT_S", 15.0)
 REGION_SPACING_S = 1.1  # re-api 빈도 제한 회피 간격 (hub와 동일)
+# 권장 스케줄: 전세계 600s + 프리셋 60s (hub adsblol 기본값)
 
 USER_AGENT = "DataLake/0.1 (+claude-lab; raw archive)"
 
@@ -91,7 +89,7 @@ def normalize(payload: dict, now: float | None = None) -> list[dict]:
     return out
 
 
-class ContrailSource:
+class ContrailClient:
     id = "contrail"
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
@@ -119,11 +117,11 @@ class ContrailSource:
             transport=self._transport,
         )
 
-    async def _fetch_global(self) -> list[Record]:
+    async def fetch_global(self) -> list[Record]:
         async with self._client() as client:
             return [await self._get(client, GLOBAL_BBOX, "global", "global")]
 
-    async def _fetch_regions(self) -> list[Record]:
+    async def fetch_regions(self) -> list[Record]:
         records: list[Record] = []
         async with self._client() as client:
             for preset, bbox in PRESETS.items():
@@ -134,12 +132,6 @@ class ContrailSource:
                 ))
         return records
 
-    def jobs(self) -> list[Job]:
-        return [
-            Job("contrail-global", GLOBAL_INTERVAL_S, self._fetch_global),
-            Job("contrail-regions", REGION_INTERVAL_S, self._fetch_regions),
-        ]
 
-
-def build() -> ContrailSource:
-    return ContrailSource()
+def build() -> ContrailClient:
+    return ContrailClient()

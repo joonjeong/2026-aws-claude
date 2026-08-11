@@ -13,22 +13,73 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import sqlite3
+import time
 from datetime import datetime
 from pathlib import Path
-
-from labkit.archive import Archive
 
 from .. import schema
 from ..core.source import Record
 
 log = logging.getLogger("datalake.sqlite")
 
+# market용 키 없는 시계열 (hub lab.db의 snapshots와 동형)
+_BASE_DDL = """
+CREATE TABLE IF NOT EXISTS snapshots (
+  module  TEXT NOT NULL,
+  kind    TEXT NOT NULL,
+  ts      REAL NOT NULL,
+  payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots ON snapshots (module, kind, ts);
+"""
+
+
+class LakeDb:
+    """단일 이벤트 루프 전제의 동기 sqlite3 래퍼 — 쓰기는 사이클당 수 KB라
+    블로킹이 1ms 미만 (hub 아카이브와 동일한 가정)."""
+
+    def __init__(self, path: Path | str) -> None:
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(p))
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.executescript(_BASE_DDL)
+        self._conn.commit()
+
+    def executescript(self, ddl: str) -> None:
+        self._conn.executescript(ddl)
+        self._conn.commit()
+
+    def insert_rows(self, sql: str, rows: list[tuple]) -> int:
+        if not rows:
+            return 0
+        cur = self._conn.executemany(sql, rows)
+        self._conn.commit()
+        return cur.rowcount
+
+    def query(self, sql: str, params: tuple = ()) -> list[tuple]:
+        return self._conn.execute(sql, params).fetchall()
+
+    def put_snapshot(self, module: str, kind: str, payload, ts: float | None = None) -> None:
+        self._conn.execute(
+            "INSERT INTO snapshots (module, kind, ts, payload) VALUES (?, ?, ?, ?)",
+            (module, kind, ts if ts is not None else time.time(),
+             json.dumps(payload, ensure_ascii=False, separators=(",", ":"))),
+        )
+        self._conn.commit()
+
+    def close(self) -> None:
+        self._conn.close()
+
 
 class SqliteSink:
     def __init__(self, db_path: Path | str) -> None:
-        self.archive = Archive(db_path)
-        for module, (ddl, tables) in schema.MODULES.items():
-            self.archive.ensure_schema(module, ddl, tables)
+        self.db = LakeDb(db_path)
+        for ddl, _tables in schema.MODULES.values():
+            self.db.executescript(ddl)
 
     def write(self, records) -> None:
         for r in records:
@@ -41,13 +92,13 @@ class SqliteSink:
                 log.exception("record failed: %s/%s", r.source, r.kind)
 
     def close(self) -> None:
-        self.archive.close()
+        self.db.close()
 
     # ── 소스별 핸들러 ─────────────────────────────────────────
     def _quake(self, r: Record) -> None:
         from ..sources.quake import normalize
 
-        self.archive.insert_rows(schema.QUAKE_INSERT, [
+        self.db.insert_rows(schema.QUAKE_INSERT, [
             (e["id"], e["mag"], e["place"], e["time"],
              e["lon"], e["lat"], e["depth_km"])
             for e in normalize(r.payload)
@@ -56,24 +107,26 @@ class SqliteSink:
     def _news(self, r: Record) -> None:
         from ..sources.news import normalize
 
-        self.archive.insert_rows(schema.NEWS_INSERT, [
+        self.db.insert_rows(schema.NEWS_INSERT, [
             (a["link"], a["source"], a["title"], a["published"],
              a["summary"], r.fetched_at)
             for a in normalize(r.kind, r.payload)
         ])
 
     def _trend(self, r: Record) -> None:
-        from ..sources.trend import INTERVAL_S, normalize
+        from ..sources.trend import normalize
 
         items = normalize(r.payload)
-        # hub와 동일: ts는 주기 버킷 정렬값 — 재기록·재구축 어느 경로든 멱등
-        ts = float(int(r.fetched_at // INTERVAL_S) * INTERVAL_S)
-        self.archive.insert_rows(schema.TREND_UPSERT_VIDEO, [
+        # hub와 동일: ts는 60s 버킷 정렬값(hub POLL_INTERVAL_S) —
+        # 재기록·재구축 어느 경로든 멱등
+        bucket_s = 60.0
+        ts = float(int(r.fetched_at // bucket_s) * bucket_s)
+        self.db.insert_rows(schema.TREND_UPSERT_VIDEO, [
             (i["video_id"], i["title"], i["channel"], i["category_id"],
              i["thumbnail"], i["published_at"], r.fetched_at, r.fetched_at)
             for i in items
         ])
-        self.archive.insert_rows(schema.TREND_INSERT_STAT, [
+        self.db.insert_rows(schema.TREND_INSERT_STAT, [
             (i["video_id"], ts, rank, i["view_count"], i["like_count"])
             for rank, i in enumerate(items, start=1)
         ])
@@ -84,11 +137,11 @@ class SqliteSink:
         if r.kind == "global":
             return  # hub와 동일 — 전세계 스냅샷은 아카이브 제외 (홍수 방지)
         flights = normalize(r.payload, now=r.fetched_at)
-        self.archive.insert_rows(schema.CONTRAIL_UPSERT_AIRCRAFT, [
+        self.db.insert_rows(schema.CONTRAIL_UPSERT_AIRCRAFT, [
             (f["id"], f["callsign"], f["origin_country"], f["ts"], f["ts"])
             for f in flights
         ])
-        self.archive.insert_rows(schema.CONTRAIL_INSERT_POSITION, [
+        self.db.insert_rows(schema.CONTRAIL_INSERT_POSITION, [
             (f["id"], f["ts"], f["lon"], f["lat"], f["alt_m"],
              f["velocity_ms"], f["track_deg"], int(f["on_ground"]))
             for f in flights
@@ -103,11 +156,11 @@ class SqliteSink:
             point = normalize_position(msg, now=r.fetched_at)
             if point is None:
                 return
-            self.archive.insert_rows(schema.WAKE_UPSERT_VESSEL, [
+            self.db.insert_rows(schema.WAKE_UPSERT_VESSEL, [
                 (point["id"], point["name"], None, None,
                  point["ts"], point["ts"]),
             ])
-            self.archive.insert_rows(schema.WAKE_INSERT_POSITION, [
+            self.db.insert_rows(schema.WAKE_INSERT_POSITION, [
                 (point["id"], point["ts"], point["lon"], point["lat"],
                  point["sog_kn"], point["cog_deg"], point["heading_deg"]),
             ])
@@ -116,7 +169,7 @@ class SqliteSink:
             if parsed is None:
                 return
             mmsi, meta = parsed
-            self.archive.insert_rows(schema.WAKE_UPSERT_VESSEL, [
+            self.db.insert_rows(schema.WAKE_UPSERT_VESSEL, [
                 (mmsi, meta["name"], meta["ship_type"], meta["callsign"],
                  r.fetched_at, r.fetched_at),
             ])
@@ -126,7 +179,7 @@ class SqliteSink:
         # 여기서 적용해 hub flashpoint_events와 같은 모집단을 유지
         from ..sources.flashpoint import normalize
 
-        self.archive.insert_rows(schema.FLASHPOINT_INSERT, [
+        self.db.insert_rows(schema.FLASHPOINT_INSERT, [
             (e["event_id"], e["ts"], e["event_day"], e["code"], e["root"],
              e["quad"], e["goldstein"], e["mentions"], e["articles"], e["tone"],
              e["actor1"], e["actor2"], e["lat"], e["lon"], e["country"],
@@ -137,12 +190,12 @@ class SqliteSink:
     def _market(self, r: Record) -> None:
         # hub와 동일하게 snapshots(JSON). ts=fetched_at 존재검증으로 멱등화
         # (snapshots는 키 없는 append 테이블이라 OR IGNORE가 불가능).
-        exists = self.archive.query(
+        exists = self.db.query(
             "SELECT 1 FROM snapshots WHERE module=? AND kind=? AND ts=? LIMIT 1",
             ("market", r.kind, r.fetched_at),
         )
         if not exists:
-            self.archive.put_snapshot("market", r.kind, r.payload,
+            self.db.put_snapshot("market", r.kind, r.payload,
                                       ts=r.fetched_at)
 
     _HANDLERS = {

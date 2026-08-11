@@ -2,12 +2,14 @@
 
 이식 원본: hub/backend/app/modules/flashpoint/{config,collector,normalize}.py. import 금지.
 
-- 무료·무키. lastupdate.txt → 최신 export.CSV.zip 다운로드 (900s 폴)
+- 무료·무키. lastupdate.txt → 최신 export.CSV.zip 다운로드
+  (권장 스케줄: 900s — GDELT가 15분 단위로 파일을 갱신)
 - 레이크 payload는 **필터 전 CSV 전문** — hub는 CAMEO 루트 14~20만 남기고
   버리지만 레이크는 원문 보존 (SQLite 싱크에서만 hub 동형 필터 적용)
 - 보안 가드 hub와 동일: 허용 프리픽스 밖 URL 거부(SSRF), follow_redirects=False,
   zip/해제 크기 상한 (zip 폭탄)
-- 같은 파일 URL 재등장(15분 미도래)은 빈 배치 — 파일 단위 중복 방지
+- 같은 파일 URL 재등장(15분 미도래)은 빈 배치 — one-shot 실행 간에도
+  이어지도록 마지막 URL을 상태 파일에 보존
 """
 
 from __future__ import annotations
@@ -17,12 +19,12 @@ import io
 import logging
 import time
 import zipfile
+from pathlib import Path
 
 import httpx
 
-from labkit.config import env_float, env_str
-
-from ..core.source import Job, Record
+from ..core.env import env_float, env_str
+from ..core.source import Record
 
 log = logging.getLogger("datalake.flashpoint")
 
@@ -30,7 +32,6 @@ LASTUPDATE_URL = env_str(
     "DATALAKE_FLASHPOINT_URL",
     "http://data.gdeltproject.org/gdeltv2/lastupdate.txt",
 )
-INTERVAL_S = env_float("DATALAKE_FLASHPOINT_INTERVAL_S", 900.0)  # hub FLASHPOINT_POLL_S
 TIMEOUT_S = env_float("DATALAKE_FLASHPOINT_TIMEOUT_S", 30.0)
 
 # lastupdate.txt와 같은 디렉터리의 파일만 허용 — 평문 HTTP 응답 오염 시
@@ -139,14 +140,30 @@ def normalize(lines, roots: set[str] | None = None) -> list[dict]:
     return out
 
 
-class FlashpointSource:
+class FlashpointClient:
     id = "flashpoint"
 
-    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        transport: httpx.AsyncBaseTransport | None = None,
+        state_path: Path | str | None = None,
+    ) -> None:
         self._transport = transport
-        self._last_url: str | None = None
+        # one-shot 실행 간 파일 단위 중복 방지 — 마지막 처리 URL 보존
+        self._state_path = Path(state_path) if state_path else None
 
-    async def _fetch(self) -> list[Record]:
+    def _read_last_url(self) -> str | None:
+        if self._state_path is None or not self._state_path.exists():
+            return None
+        return self._state_path.read_text(encoding="utf-8").strip() or None
+
+    def _write_last_url(self, url: str) -> None:
+        if self._state_path is None:
+            return
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_path.write_text(url, encoding="utf-8")
+
+    async def fetch(self, force: bool = False) -> list[Record]:
         started = time.monotonic()
         # follow_redirects=False: 프리픽스 검증을 통과한 URL이 리다이렉트로
         # 임의 호스트에 닿는 우회 차단 (hub와 동일한 방어선)
@@ -156,13 +173,14 @@ class FlashpointSource:
             resp = await client.get(LASTUPDATE_URL)
             resp.raise_for_status()
             url = pick_export_url(resp.text)
-            if url == self._last_url:
-                return []  # 새 15분 배치 아직 없음
+            if not force and url == self._read_last_url():
+                log.info("새 15분 배치 아직 없음: %s", url)
+                return []
             blob = (await client.get(url)).raise_for_status().content
             if len(blob) > MAX_ZIP_BYTES:
                 raise ValueError(f"zip too large: {len(blob)} bytes")
         csv_text = _unzip_text(blob)
-        self._last_url = url  # 다운로드·파싱 성공 후에만 갱신 (실패 시 재시도)
+        self._write_last_url(url)  # 다운로드·파싱 성공 후에만 갱신
         return [
             Record(
                 source=self.id,
@@ -177,9 +195,6 @@ class FlashpointSource:
             )
         ]
 
-    def jobs(self) -> list[Job]:
-        return [Job("flashpoint-gdelt", INTERVAL_S, self._fetch)]
 
-
-def build() -> FlashpointSource:
-    return FlashpointSource()
+def build(state_path: Path | str | None = None) -> FlashpointClient:
+    return FlashpointClient(state_path=state_path)

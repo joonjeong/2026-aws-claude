@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from labkit.config import env_float, env_int
+from .core.env import env_float, env_int
 
 # 데이터 루트: shared/datalake/data (gitignore 대상)
 _DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "data"

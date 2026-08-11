@@ -18,15 +18,13 @@ run = [
     "pnpm --dir hub/frontend install",
 ]
 
-[tasks."datalake:run"]
-description = "데이터레이크 수집 실행 — hub와 독립 프로세스 (env: DATALAKE_ROOT, DATALAKE_SOURCES, DATALAKE_SQLITE, YT_API_KEY, DATALAKE_AIS_KEY)"
+# 데이터레이크는 소스별 one-shot CLI — 케이던스는 오케스트레이터(Temporal 예정) 소유.
+# 예: uv run datalake-quake | datalake-news | datalake-contrail --scope regions
+#     | datalake-wake --duration 300 | datalake-rebuild | datalake-maintenance
+[tasks."datalake:smoke"]
+description = "데이터레이크 스모크 — 무키 소스(quake·flashpoint) 1회 수집"
 dir = "shared/datalake"
-run = "uv run python -m datalake run ${DATALAKE_SOURCES:+--sources $DATALAKE_SOURCES}"
-
-[tasks."datalake:once"]
-description = "데이터레이크 1회 수집 스모크 (poll 소스만)"
-dir = "shared/datalake"
-run = "uv run python -m datalake run --once"
+run = ["uv run datalake-quake", "uv run datalake-flashpoint"]
 
 [tasks."datalake:test"]
 description = "데이터레이크 테스트"

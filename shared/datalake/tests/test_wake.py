@@ -19,7 +19,7 @@ def test_build_disabled_without_key(monkeypatch):
 
 def test_subscribe_payload_shape(monkeypatch):
     monkeypatch.setenv("DATALAKE_AIS_KEY", "K")
-    src = wake.WakeSource(api_key="K")
+    src = wake.WakeClient(api_key="K")
     sub = src.subscribe_payload()
     assert sub == {
         "APIKey": "K",
@@ -29,7 +29,7 @@ def test_subscribe_payload_shape(monkeypatch):
 
 
 def test_parse_wraps_raw_message():
-    src = wake.WakeSource(api_key="K")
+    src = wake.WakeClient(api_key="K")
     (rec,) = src.parse(_pos_msg())
     assert rec.source == "wake" and rec.kind == "ais"
     assert rec.payload["MessageType"] == "PositionReport"

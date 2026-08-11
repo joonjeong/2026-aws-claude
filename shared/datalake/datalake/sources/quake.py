@@ -1,7 +1,8 @@
-"""quake — USGS 지진 피드. 주기·정규화는 hub quake 모듈과 동일.
+"""quake — USGS 지진 피드 클라이언트. 정규화는 hub quake 모듈과 동일.
 
 이식 원본: hub/backend/app/modules/quake/collector.py (코드 이식, import 금지).
 Record.payload는 USGS 응답 전체(FeatureCollection) 원본.
+권장 스케줄: 60s (hub QUAKE_POLL_INTERVAL_S와 동일 — README 참조).
 """
 
 from __future__ import annotations
@@ -11,9 +12,8 @@ import time
 
 import httpx
 
-from labkit.config import env_float, env_str
-
-from ..core.source import Job, Record
+from ..core.env import env_float, env_str
+from ..core.source import Record
 
 log = logging.getLogger("datalake.quake")
 
@@ -21,7 +21,6 @@ FEED_URL = env_str(
     "DATALAKE_QUAKE_FEED_URL",
     "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson",
 )
-INTERVAL_S = env_float("DATALAKE_QUAKE_INTERVAL_S", 60.0)  # hub QUAKE_POLL_INTERVAL_S
 TIMEOUT_S = env_float("DATALAKE_QUAKE_TIMEOUT_S", 10.0)
 
 
@@ -68,13 +67,13 @@ def normalize(payload: dict) -> list[dict]:
     return events
 
 
-class QuakeSource:
+class QuakeClient:
     id = "quake"
 
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
 
-    async def _fetch(self) -> list[Record]:
+    async def fetch(self) -> list[Record]:
         started = time.monotonic()
         async with httpx.AsyncClient(
             timeout=TIMEOUT_S, transport=self._transport
@@ -95,9 +94,6 @@ class QuakeSource:
             )
         ]
 
-    def jobs(self) -> list[Job]:
-        return [Job("quake-usgs", INTERVAL_S, self._fetch)]
 
-
-def build() -> QuakeSource:
-    return QuakeSource()
+def build() -> QuakeClient:
+    return QuakeClient()

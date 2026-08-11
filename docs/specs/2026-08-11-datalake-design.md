@@ -41,51 +41,60 @@ LLM 파생물(브리핑·렌즈·AI 분석)은 전 모듈에서 버킷 캐시로
 
 | 방식 | 내용 | 판정 |
 |---|---|---|
-| A. 독립 패키지 + labkit 재사용 | `shared/datalake`를 별도 배포 단위로 만들고, 검증된 `labkit`(PollingCollector·StreamCollector·env 헬퍼·Archive)만 라이브러리로 재사용 | **채택** — 프로세스 완전 독립 + 코드 중복 최소, "통합 솔루션이 수집기를 import해 조합" 방향과 일치 |
+| A. 독립 패키지 + labkit 재사용 | 검증된 labkit(폴러·스트림·env·Archive)만 라이브러리로 재사용 | v0.1 채택 → **v0.2에서 폐기** |
 | B. hub 모듈 collector import | hub 코드 직접 재사용 | 기각 — hub `app.*` config/전역 상태에 결합, 독립성 제약 위반 |
-| C. 완전 무의존 | labkit도 안 쓰고 재구현 | 기각 — poller/stream/백오프 재구현은 순수 중복 |
+| C. 완전 무의존 | labkit도 안 쓰고 자체 구현 | **v0.2 채택** (사용자 결정 2026-08-11) |
 
-labkit은 **라이브러리**이지 실행 중인 웹서비스가 아니므로 A는 독립성 제약을
-위반하지 않는다. 단, labkit 인터페이스 변경 시 영향 확인 대상이 hub 6모듈 +
-datalake로 늘어난다.
+**v0.2 결정 변경 (2026-08-11, 사용자 지시):**
+1. labkit 결합 제거 — 의존성은 httpx·feedparser·websockets뿐. 스트림 수집기·
+   env 헬퍼·SQLite 래퍼는 `datalake/core/`에 자체 구현.
+2. 실행 모델을 **소스별 one-shot CLI**로 전환 — 클라이언트를 래핑하는
+   `uv run datalake-<source>` 명령이 1회 수집→적재 후 종료.
+3. **스케줄링 기능 전면 제거** — 상시 폴링 루프(Runner/PollingCollector),
+   market 장시간 TTL 게이트, 일일 유지보수 폴러는 향후 도입할 Temporal 등
+   외부 오케스트레이터와 중복이므로 삭제. 주기는 §6의 권장 스케줄 문서로만
+   유지하고, 실패는 종료 코드(0/1/2)로 전달해 재시도를 오케스트레이터에 맡긴다.
 
 ## 4. 아키텍처
 
 ```
 shared/datalake/
-├── pyproject.toml            # name="datalake", deps: labkit, httpx, feedparser, websockets
-│                             # (market 채택 시 yfinance·pykrx 추가)
+├── pyproject.toml            # deps: httpx, feedparser, websockets (labkit 없음)
+│                             # [project.scripts] datalake-* 명령 9개
 ├── datalake/
-│   ├── config.py             # DATALAKE_* env (labkit.config 헬퍼 사용)
+│   ├── config.py             # DATALAKE_* env
 │   ├── core/
-│   │   ├── source.py         # SourceMeta, PollSource/StreamSource 프로토콜, Record
-│   │   ├── sinks.py          # FileSink(기본), SqliteSink(옵션)
-│   │   └── runner.py         # 소스 → labkit 폴러/스트림 조립, 상태 리포트
-│   ├── sources/              # ★ 재사용 가능한 코어 클라이언트 (모듈당 1파일)
-│   │   ├── quake.py          #   fetch()/normalize() 순수 함수 + Client 클래스
-│   │   ├── news.py           #   부작용 없음 — sink·저장을 모름
-│   │   ├── trend.py
-│   │   ├── market.py
-│   │   ├── contrail.py
-│   │   └── wake.py
-│   ├── schema.py             # SQLite 옵션용 DDL (hub 정규화 테이블과 동형)
-│   └── __main__.py           # python -m datalake run [--sources ...] [--once]
+│   │   ├── source.py         # Record (스케줄 메타 없음)
+│   │   ├── env.py            # env_str/int/float (자체 구현)
+│   │   ├── stream.py         # StreamCollector — 백오프 재접속, connect 주입
+│   │   ├── sinks.py          # FileSink(기본)
+│   │   ├── sqlite_sink.py    # LakeDb + SqliteSink + rebuild (자체 sqlite3 래퍼)
+│   │   └── maintenance.py    # gzip 로테이션·보존 프루닝 (one-shot 함수)
+│   ├── sources/              # ★ 순수 코어 클라이언트 (모듈당 1파일)
+│   │   ├── quake.py news.py trend.py contrail.py wake.py market.py flashpoint.py
+│   ├── cli/                  # ★ 소스별 one-shot CLI (클라이언트 래핑)
+│   │   ├── _common.py        #   싱크 조립·배출 격리·run_async(종료 코드)
+│   │   ├── quake.py … flashpoint.py, rebuild.py, maintenance.py
+│   └── schema.py             # SQLite 옵션용 DDL (hub 정규화 테이블과 동형)
 └── tests/
 ```
 
 **코어 클라이언트 계약** — 각 `sources/<id>.py`는:
-- `META: SourceMeta` — id, kind 목록, 모드(poll/stream), 기본 주기(hub와 동일 값)
-- `class Client` — `fetch() -> list[Record]` (poll) 또는 `subscribe(on_record)` (stream).
-  `Record = (kind, meta, payload_raw)`. 원본 페이로드를 그대로 반환.
+- `class <Id>Client` — `fetch*() -> list[Record]` (poll) 또는
+  `subscribe_payload()/parse(msg)` (stream). 원본 페이로드를 그대로 반환.
 - `normalize(payload) -> rows` — hub와 동일한 정규화 (SQLite 싱크·후속 소비자용)
-- 저장·경로·DB를 일절 모름 → hub든 통합 솔루션이든 그대로 import 가능
+- `build() -> Client | None` — None = 키·엑스트라 부재로 비활성
+- 저장·경로·DB·스케줄을 일절 모름 → 어떤 소비자든 그대로 import 가능
+
+**CLI 계약** — `uv run datalake-<source>`:
+- 1회 수집→전 싱크 배출→종료. 종료 코드 0 성공 / 1 실패 / 2 소스 비활성
+- 재시도·백오프 없음 (오케스트레이터 소유). wake만 `--duration`으로 구간 실행
 
 **독립성 보장:**
-- `hub.*` / `app.*` import 금지 (테스트로 강제: import 그래프 검사)
+- `hub.*` / `app.*` / `labkit` import 금지 (테스트로 강제: import 그래프 검사)
 - 자체 데이터 루트 `DATALAKE_ROOT` (기본 `shared/datalake/data/`, gitignore)
 - `lab.db` 경로를 알지도 못함. SQLite 옵션은 자체 `datalake.db`
-- 별도 프로세스 (`python -m datalake run`), 향후 별도 컨테이너
-- hub와 코드 공유는 labkit(라이브러리)뿐
+- 별도 프로세스, 향후 Temporal 액티비티/컨테이너로 그대로 이식 가능
 
 ## 5. 저장 설계
 
@@ -122,17 +131,21 @@ Hive 스타일 파티션 + JSONL — 나중에 DuckDB/Athena/pandas로 바로 �
 - raw 존이 진실의 원천(source of truth), SQLite는 조회 편의용 파생 존.
   유실 시 raw에서 재구축 가능해야 함 → INSERT는 전부 멱등(OR IGNORE/UPSERT).
 
-## 6. 수집 주기 (hub와 동일)
+## 6. 권장 스케줄 (hub와 동일 — 오케스트레이터 설정용 문서)
 
-| 소스 | 주기 | env (기본값 = hub 기본값) |
-|---|---|---|
-| quake | 60s | `DATALAKE_QUAKE_INTERVAL_S=60` |
-| news | 매체당 120s | `DATALAKE_NEWS_INTERVAL_S=120` |
-| trend | 60s | `DATALAKE_TREND_INTERVAL_S=60` |
-| market | 30s 폴 + 장중 45s/장외 600s 실효 게이트 (hub `hours.py` 로직 이식) | `DATALAKE_MARKET_INTERVAL_S=30` |
-| contrail | 전세계 600s + 프리셋 4개 60s | `DATALAKE_CONTRAIL_GLOBAL_S=600`, `_REGION_S=60` |
-| wake | 상시 WebSocket (hub와 동일 프리셋 bbox 구독) | 주기 없음, `DATALAKE_FLUSH_S=10` |
-| flashpoint | 900s, 파일 단위 중복 스킵. raw는 필터 전 CSV 전문 보존(SQLite만 hub 동형 필터) | `DATALAKE_FLASHPOINT_INTERVAL_S=900` |
+주기 env는 두지 않는다 — 스케줄은 오케스트레이터 설정이 유일한 진실이다.
+
+| 명령 | 권장 주기 |
+|---|---|
+| `datalake-quake` | 60s |
+| `datalake-news` | 120s |
+| `datalake-trend` | 60s |
+| `datalake-market` | 장중 45s / 장외 600s (hub 실효 TTL을 스케줄로 재현) |
+| `datalake-contrail --scope regions` | 60s (프리셋 4개는 내부 순차 1.1s) |
+| `datalake-contrail --scope global` | 600s |
+| `datalake-wake --duration N` | 상시 또는 겹치지 않는 구간 반복 (`DATALAKE_FLUSH_S=10`) |
+| `datalake-flashpoint` | 900s — 파일 중복은 상태 파일로 스킵, GDELT 게시 지연 404는 코드 1로 재시도 위임 |
+| `datalake-maintenance` | 일 1회 |
 
 ## 7. 리스크 / 확인 항목
 
