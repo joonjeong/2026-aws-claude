@@ -16,6 +16,8 @@ POSITIONS_RETENTION_DAYS = env_int("WAKE_POSITIONS_RETENTION_DAYS", 7)
 BRIEF_MAX_TOKENS = env_int("WAKE_BRIEF_MAX_TOKENS", 700)
 BRIEF_BUCKET_S = env_int("WAKE_BRIEF_BUCKET_S", 600)
 
+PRESET_COOLDOWN_S = env_float("WAKE_PRESET_COOLDOWN_S", 10.0)  # 프리셋 전환 최소 간격
+
 # 관심 지역 프리셋 — bbox는 (lat_min, lon_min, lat_max, lon_max).
 # contrail과 동일 기본 목록 (스펙 §2), 선택 상태는 모듈별 독립.
 PRESETS: list[dict] = [

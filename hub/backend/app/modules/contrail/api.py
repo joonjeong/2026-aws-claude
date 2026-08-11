@@ -89,6 +89,13 @@ async def set_preset(body: PresetBody):
     if body.id not in {p["id"] for p in config.PRESETS}:
         raise HTTPException(status_code=422, detail=f"unknown preset: {body.id}")
     if body.id != store.active_preset:
+        now = time.time()
+        if (
+            store.last_preset_switch is not None
+            and now - store.last_preset_switch < config.PRESET_COOLDOWN_S
+        ):
+            raise HTTPException(status_code=429, detail="preset switch cooldown")
+        store.last_preset_switch = now
         store.active_preset = body.id
         store.reset()
         # 다음 정규 주기를 기다리지 않고 새 bbox로 즉시 1회 수집

@@ -77,6 +77,13 @@ async def set_preset(body: PresetBody):
     if body.id not in {p["id"] for p in config.PRESETS}:
         raise HTTPException(status_code=422, detail=f"unknown preset: {body.id}")
     if body.id != store.active_preset:
+        now = time.time()
+        if (
+            store.last_preset_switch is not None
+            and now - store.last_preset_switch < config.PRESET_COOLDOWN_S
+        ):
+            raise HTTPException(status_code=429, detail="preset switch cooldown")
+        store.last_preset_switch = now
         store.active_preset = body.id
         store.reset()          # 다른 해역의 trail이 섞이지 않게
         collector.resubscribe()  # 라이브 소켓에 새 bbox 구독 재전송

@@ -17,6 +17,7 @@ class WakeStore:
         )
         self.active_preset = config.DEFAULT_PRESET
         self._last_archived: dict[str, float] = {}
+        self.last_preset_switch: float | None = None
 
     def preset(self) -> dict:
         return next(p for p in config.PRESETS if p["id"] == self.active_preset)

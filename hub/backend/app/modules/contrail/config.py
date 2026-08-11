@@ -37,6 +37,8 @@ POSITIONS_RETENTION_DAYS = env_int("CONTRAIL_POSITIONS_RETENTION_DAYS", 7)
 BRIEF_MAX_TOKENS = env_int("CONTRAIL_BRIEF_MAX_TOKENS", 700)
 BRIEF_BUCKET_S = env_int("CONTRAIL_BRIEF_BUCKET_S", 600)
 
+PRESET_COOLDOWN_S = env_float("CONTRAIL_PRESET_COOLDOWN_S", 10.0)  # 프리셋 전환 최소 간격
+
 # 관심 지역 프리셋 — wake와 동일 기본 목록 (bbox = lat_min, lon_min, lat_max, lon_max)
 PRESETS: list[dict] = [
     {"id": "kr", "label": "한반도 주변", "bbox": (30.0, 120.0, 45.0, 135.0)},
