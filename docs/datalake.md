@@ -185,6 +185,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.4 | 메달리온 존 네이밍(bronze/silver/gold 예약) · contrail 다중 제공자(adsb.lol/OpenSky) | 사용자 결정: 메달리온 관례 채택 + 다중 상류 소스 대응 실증 |
 | v0.5 | 봉투 의미 반전: source=상류·kind=데이터셋 · 명령 25개를 상류 단위로 재편(usgs-feed, bbc, adsblol, yfinance, pykrx …) | 사용자 결정: 상류가 수집의 단위 — kind 접두사 편법 제거, 저장 프로토콜(봉투)로 통일 |
 | v0.6 | RSS 단일 명령(`datalake-rss`) + 목록 파일(rss_feeds.toml) 관리. 사설·표준-준(準) 상류는 개별 명령 유지 | 사용자 결정: 표준 포맷은 클라이언트가 제네릭 — 대상 관리는 코드가 아닌 목록으로 |
+| v0.7 | market 심볼 목록 파일(market_symbols.toml) + yfinance·pykrx 기본 의존성 승격(extra 폐지) | 사용자 결정: 대상은 목록으로, extra 미설치=코드 2 함정 제거 — 전 상류 실수집 검증 완료 |
 
 ## 10. 검증 상태 (2026-08-11)
 

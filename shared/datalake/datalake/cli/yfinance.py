@@ -1,6 +1,6 @@
-"""uv run datalake-yfinance — Yahoo Finance 1회 수집. `--extra market` 필요.
+"""uv run datalake-yfinance — Yahoo Finance 1회 수집.
 
-생산 kind: market_overview + market_quotes_us.
+생산 kind: market_overview + market_quotes_us (대상: market_symbols.toml).
 권장 스케줄: 장중 45s / 장외 600s (비공식 라이브러리 호출량 배려).
 """
 
@@ -16,9 +16,6 @@ log = logging.getLogger("datalake.cli")
 
 async def _run(args) -> int:
     client = yfinance.build()
-    if client is None:
-        log.error("yfinance 비활성: uv sync --extra market 필요")
-        return _common.EXIT_DISABLED
     sinks = _common.build_sinks()
     try:
         kinds = args.kinds.split(",") if args.kinds else None

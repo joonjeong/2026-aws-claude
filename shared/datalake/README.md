@@ -13,10 +13,10 @@ hub의 7개 모듈이 보는 것과 동일한 외부 상류를 **hub와 완전�
 - **`kind` = 생산되는 데이터셋**(quake, news, contrail_region_kr, wake, …)
 - **명령 = 상류 단위** — `uv run datalake-<source>`. 한 상류가 여러
   데이터셋을 생산할 수 있다 (adsblol → contrail_global + region 4개).
-- **표준 포맷 상류는 목록 관리형** — RSS는 클라이언트가 매체 무관
-  제네릭이라 단일 명령(`datalake-rss`)이 목록 파일
-  (`sources/rss_feeds.toml`, env `DATALAKE_RSS_FEEDS`로 교체)을 순회한다.
-  매체 추가 = 목록에 한 항목. 봉투는 매체 단위 유지(source=매체 id).
+- **수집 대상은 목록 파일이 관리** — RSS 매체는 `sources/rss_feeds.toml`
+  (env `DATALAKE_RSS_FEEDS`), market 심볼·지수·지표는
+  `sources/market_symbols.toml`(env `DATALAKE_MARKET_SYMBOLS`).
+  대상 추가 = 목록에 한 항목, 코드 무변경. 봉투는 상류 단위 유지.
 - 같은 데이터셋을 여러 상류가 공급하면(contrail: adsblol/opensky) bronze는
   source로 경로가 갈리고, silver에서 같은 제공자 중립 테이블로 수렴한다.
 
@@ -96,14 +96,14 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | `datalake-adsblol --scope regions\|global` | contrail_region_* / contrail_global | 60s / 600s | 항상 |
 | `datalake-opensky --scope …` | 동일 (adsblol과 수렴) | 동일 | 항상 (인증 권장) |
 | `datalake-aisstream --duration 300` | wake | 상시 또는 겹치지 않는 구간 | `DATALAKE_AIS_KEY` |
-| `datalake-yfinance [--kinds …]` | market_overview, market_quotes_us | 장중 45s / 장외 600s | `--extra market` |
-| `datalake-pykrx` | market_quotes_kr | 장중 45s / 장외 600s | `--extra market` |
+| `datalake-yfinance [--kinds …]` | market_overview, market_quotes_us | 장중 45s / 장외 600s | 항상 |
+| `datalake-pykrx` | market_quotes_kr | 장중 45s / 장외 600s | 항상 |
 | `datalake-gdelt [--force]` | flashpoint | 900s | 항상 |
 | `datalake-normalize [--date D] [--tables t,..]` | bronze → silver (멱등) | 시간당 + 자정 후 전일 확정 | — |
 | `datalake-maintenance` | 전일 bronze gzip + 보존 프루닝 | 일 1회 | — |
 
 ```bash
-cd shared/datalake && uv sync        # 준비 (market까지: uv sync --extra market)
+cd shared/datalake && uv sync        # 준비 (yfinance·pykrx 포함 전체 설치)
 mise run datalake:smoke              # 무키 상류 스모크 (usgs-feed·rss·gdelt)
 mise run datalake:test               # 테스트
 ```
@@ -117,6 +117,7 @@ mise run datalake:test               # 테스트
 | `DATALAKE_COMPRESS` | `1` | maintenance의 전일 bronze gzip |
 | `DATALAKE_RAW_RETENTION_DAYS` | `0` (무제한) | maintenance의 bronze 보존기간 |
 | `DATALAKE_RSS_FEEDS` | 패키지 내장 `rss_feeds.toml` | RSS 수집 대상 목록 파일 |
+| `DATALAKE_MARKET_SYMBOLS` | 패키지 내장 `market_symbols.toml` | market 심볼·지수·지표 목록 파일 |
 | `DATALAKE_AISSTREAM_PRESET` | `kr` | aisstream 관심 해역 (kr/taiwan/sea) |
 | `DATALAKE_OPENSKY_CLIENT_ID/SECRET` | — | OpenSky OAuth2 (없으면 익명 감속) |
 | `DATALAKE_MARKET_ACTIVE_US/KR` | `20` | yfinance/pykrx 활성 심볼 수 |

@@ -1,8 +1,9 @@
-"""yfinance — Yahoo Finance 상류 (optional extra). 생산 kind:
+"""yfinance — Yahoo Finance 상류. 생산 kind:
 market_overview(지수 5+지표 11) + market_quotes_us(활성 20종목).
 
-이식 원본: hub/backend/app/modules/market/{core/config.py, services/us.py}.
-import 금지. yfinance는 비공식 라이브러리 — 권장 스케줄(장중 45s/장외 600s)로
+이식 원본: hub/backend/app/modules/market/services/us.py. import 금지.
+수집 대상(심볼·지수·지표)은 market_symbols.toml이 관리한다.
+yfinance는 비공식 라이브러리 — 권장 스케줄(장중 45s/장외 600s)로
 hub와 합산 호출량을 관리한다 (케이던스는 오케스트레이터 소유).
 """
 
@@ -13,51 +14,14 @@ import logging
 import math
 from typing import Any
 
-from ..core.env import env_int
 from ..core.source import Record
 
 log = logging.getLogger("datalake.yfinance")
 
 KINDS = ("market_overview", "market_quotes_us")
 
-# hub market core/config.py 값 복사 — US 50, 목록 순서 고정
-US_SYMBOLS: list[tuple[str, str]] = [
-    ("AAPL", "Apple"), ("MSFT", "Microsoft"), ("GOOGL", "Alphabet"),
-    ("AMZN", "Amazon"), ("NVDA", "NVIDIA"), ("META", "Meta Platforms"),
-    ("TSLA", "Tesla"), ("BRK-B", "Berkshire Hathaway"), ("JPM", "JPMorgan Chase"),
-    ("V", "Visa"), ("JNJ", "Johnson & Johnson"), ("UNH", "UnitedHealth"),
-    ("WMT", "Walmart"), ("MA", "Mastercard"), ("PG", "Procter & Gamble"),
-    ("HD", "Home Depot"), ("XOM", "Exxon Mobil"), ("CVX", "Chevron"),
-    ("LLY", "Eli Lilly"), ("ABBV", "AbbVie"), ("PFE", "Pfizer"),
-    ("KO", "Coca-Cola"), ("PEP", "PepsiCo"), ("MRK", "Merck"),
-    ("COST", "Costco"), ("AVGO", "Broadcom"), ("AMD", "AMD"),
-    ("ORCL", "Oracle"), ("CRM", "Salesforce"), ("NFLX", "Netflix"),
-    ("ADBE", "Adobe"), ("CSCO", "Cisco"), ("ACN", "Accenture"),
-    ("TXN", "Texas Instruments"), ("INTC", "Intel"), ("QCOM", "Qualcomm"),
-    ("INTU", "Intuit"), ("AMAT", "Applied Materials"), ("BKNG", "Booking Holdings"),
-    ("ISRG", "Intuitive Surgical"), ("MDLZ", "Mondelez"), ("ADP", "ADP"),
-    ("REGN", "Regeneron"), ("VRTX", "Vertex Pharmaceuticals"), ("GILD", "Gilead Sciences"),
-    ("PANW", "Palo Alto Networks"), ("LRCX", "Lam Research"), ("MU", "Micron"),
-    ("KLAC", "KLA"), ("SNPS", "Synopsys"),
-]
-
-ACTIVE_US = US_SYMBOLS[:env_int("DATALAKE_MARKET_ACTIVE_US", 20)]
-
-INDICES: list[tuple[str, str, str]] = [  # (yf ticker, display name, market)
-    ("^GSPC", "S&P 500", "US"),
-    ("^IXIC", "NASDAQ", "US"),
-    ("^DJI", "Dow Jones", "US"),
-    ("^KS11", "KOSPI", "KR"),
-    ("^KQ11", "KOSDAQ", "KR"),
-]
-
-INDICATORS: list[tuple[str, str]] = [
-    ("CL=F", "WTI유"), ("GC=F", "금"), ("SI=F", "은"), ("HG=F", "구리"),
-    ("EURUSD=X", "EUR/USD"), ("KRW=X", "USD/KRW"), ("JPY=X", "USD/JPY"),
-    ("CNY=X", "USD/CNY"), ("^TNX", "미 10년물"),
-    ("BTC-USD", "비트코인"), ("ETH-USD", "이더리움"),
-]
-
+# 수집 대상은 market_symbols.toml이 관리 — 목록 편집 = 코드 무변경
+from .market_symbols import ACTIVE_US, INDICES, INDICATORS, US_SYMBOLS  # noqa: F401,E402
 
 # ── hub services/us.py 이식 — import는 함수 내부(extra 격리) ─────────
 def _last_two_closes(df) -> tuple[float, float, int]:
@@ -76,7 +40,7 @@ def _last_two_closes(df) -> tuple[float, float, int]:
 
 
 def _quote_rows(tickers: list[tuple[str, str]]) -> list[dict[str, Any]]:
-    import yfinance as yf  # market extra
+    import yfinance as yf
 
     data = yf.download(
         tickers=" ".join(t for t, _ in tickers),
@@ -144,11 +108,5 @@ class YFinanceClient:
         return records
 
 
-def build() -> YFinanceClient | None:
-    try:
-        import yfinance  # noqa: F401
-    except ImportError:
-        log.info("yfinance 비활성: market extra 미설치 "
-                 "(uv sync --extra market 후 사용 가능)")
-        return None
+def build() -> YFinanceClient:
     return YFinanceClient()

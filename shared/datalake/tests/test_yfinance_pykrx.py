@@ -1,5 +1,3 @@
-import importlib.util
-
 import pytest
 
 from datalake.sources import pykrx, yfinance
@@ -65,8 +63,14 @@ def test_symbol_universe():
     assert len(yfinance.INDICES) == 5 and len(yfinance.INDICATORS) == 11
 
 
-@pytest.mark.skipif(importlib.util.find_spec("yfinance") is not None,
-                    reason="market extra 설치 환경에서는 build가 활성")
-def test_build_disabled_without_extra():
-    assert yfinance.build() is None
-    assert pykrx.build() is None
+def test_symbol_list_override(tmp_path, monkeypatch):
+    custom = tmp_path / "symbols.toml"
+    custom.write_text(
+        '[us]\nsymbols = [["TEST", "Test Co"]]\n'
+        '[kr]\nsymbols = [["000001", "테스트"]]\n'
+        '[indices]\nitems = [["^T", "T", "US"]]\n'
+        '[indicators]\nitems = [["X=F", "엑스"]]\n', encoding="utf-8")
+    monkeypatch.setenv("DATALAKE_MARKET_SYMBOLS", str(custom))
+    from datalake.sources import market_symbols
+    data = market_symbols._load()
+    assert data["us"]["symbols"] == [["TEST", "Test Co"]]  # 목록 파일 교체

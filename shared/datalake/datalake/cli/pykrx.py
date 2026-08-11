@@ -1,6 +1,6 @@
 """uv run datalake-pykrx — KRX 시세 1회 수집 (kind: market_quotes_kr).
 
-`--extra market` 필요. 권장 스케줄: 장중 45s / 장외 600s.
+대상: market_symbols.toml. 권장 스케줄: 장중 45s / 장외 600s.
 """
 
 from __future__ import annotations
@@ -15,9 +15,6 @@ log = logging.getLogger("datalake.cli")
 
 async def _run(args) -> int:
     client = pykrx.build()
-    if client is None:
-        log.error("pykrx 비활성: uv sync --extra market 필요")
-        return _common.EXIT_DISABLED
     sinks = _common.build_sinks()
     try:
         records = await client.fetch()

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "datalake"
-version = "0.6.0"
+version = "0.7.0"
 description = "claude-lab 독립 데이터레이크 수집기 — 소스별 one-shot CLI, 스케줄링은 외부 오케스트레이터(Temporal 예정) 소유"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,10 +12,9 @@ dependencies = [
     "feedparser>=6",
     "websockets>=12",
     "pyarrow>=17",
+    "yfinance>=0.2",
+    "pykrx>=1.0",
 ]
-
-[project.optional-dependencies]
-market = ["yfinance>=0.2", "pykrx>=1.0"]
 
 [project.scripts]
 # 명령 = 상류(source) 단위. kind(데이터셋)는 명령이 생산한다.
