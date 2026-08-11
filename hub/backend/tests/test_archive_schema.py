@@ -61,6 +61,17 @@ def test_prune_table_by_retention(tmp_path):
     assert a.prune_table("unregistered", "ts", 7) == 0       # 미등록 테이블 거부
 
 
+def test_execute_runs_dml_and_returns_rowcount(tmp_path):
+    a = make(tmp_path)
+    a.insert_rows(
+        "INSERT OR IGNORE INTO t_positions (mmsi, ts, lon, lat) VALUES (?, ?, ?, ?)",
+        [("1", 1.0, 0, 0), ("2", 1.0, 0, 0)],
+    )
+    assert a.execute("DELETE FROM t_positions WHERE mmsi = ?", ("1",)) == 1
+    assert a.query("SELECT COUNT(*) FROM t_positions")[0][0] == 1
+    assert a.execute("DELETE FROM t_positions WHERE mmsi = 'nope'") == 0
+
+
 def test_prune_table_rejects_bad_column_identifier(tmp_path):
     a = make(tmp_path)
     with pytest.raises(ValueError):

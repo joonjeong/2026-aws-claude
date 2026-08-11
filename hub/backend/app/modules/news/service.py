@@ -8,14 +8,25 @@ keeps the per-source failure isolation — a failing feed only fails its own tas
 from __future__ import annotations
 
 import asyncio
+import time
 
 from labkit import PollingCollector
 
-from ...archive import archive_entities
-from . import config
+from ...archive import archive_insert
+from . import config, schema
 from .collector.rss import fetch_articles
 from .llm.lens import Lens
 from .store.articles import ArticleStore
+
+
+def archive_articles(articles: list[dict]) -> None:
+    """정규화 이력 기록 (best-effort) — link PK라 재관찰은 no-op."""
+    now = time.time()
+    archive_insert(schema.INSERT_ARTICLE, [
+        (a["link"], a["source"], a["title"], a.get("published"),
+         a.get("summary"), now)
+        for a in articles
+    ])
 
 
 def _make_collector(source: dict, store: ArticleStore) -> PollingCollector:
@@ -24,8 +35,7 @@ def _make_collector(source: dict, store: ArticleStore) -> PollingCollector:
 
     def on_result(articles: list[dict]) -> None:
         store.ingest(source["id"], articles)
-        # 이력 아카이브 (best-effort) — link PK, 기사 dict에 source 포함됨
-        archive_entities("news", [(a["link"], a) for a in articles])
+        archive_articles(articles)
 
     return PollingCollector(
         name=source["id"],

@@ -13,6 +13,9 @@ POLL_INTERVAL_S = env_int("POLL_INTERVAL_S", 60)
 # Snapshot ring buffer keeps the most recent 48 buckets.
 SNAPSHOT_CAPACITY = 48
 
+# 정규화 fact(trend_video_stats) 보존일 — dim(trend_videos)은 영구.
+STATS_RETENTION_DAYS = env_int("TREND_STATS_RETENTION_DAYS", 30)
+
 REGION_CODE = env_str("REGION_CODE", "KR")
 MAX_RESULTS = 30
 

@@ -6,9 +6,11 @@ per poll cycle, so blocking stays under a millisecond (same assumption as
 stores.py — one event loop, no locks).
 
 Two tables by data shape:
-- entities:  natural-keyed items (quake events, news articles).
-             INSERT OR IGNORE makes re-observation by pollers a no-op.
-- snapshots: keyless time series (market quotes, trend snapshots). Append.
+- entities:  natural-keyed items. INSERT OR IGNORE makes re-observation by
+             pollers a no-op. (quake/news moved on to normalized tables via
+             ensure_schema; entities stays as the pre-normalization landing
+             zone and keeps rows a backfill could not parse.)
+- snapshots: keyless time series (market quotes). Append.
 """
 from __future__ import annotations
 
@@ -121,6 +123,12 @@ class Archive:
 
     def query(self, sql: str, params: tuple = ()) -> list[tuple]:
         return self._conn.execute(sql, params).fetchall()
+
+    def execute(self, sql: str, params: tuple = ()) -> int:
+        """Single DML statement (DELETE/UPDATE); returns affected rowcount."""
+        cur = self._conn.execute(sql, params)
+        self._conn.commit()
+        return cur.rowcount
 
     def prune_table(self, table: str, ts_col: str, days: int) -> int:
         """Delete rows older than `days` from a REGISTERED table only —

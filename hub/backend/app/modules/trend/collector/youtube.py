@@ -29,8 +29,8 @@ import httpx
 from labkit.cache import time_bucket
 from labkit.poller import PollingCollector
 
-from ....archive import archive_snapshot
-from .. import config
+from ....archive import archive_insert
+from .. import config, schema
 from ..store.snapshots import SnapshotStore
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,33 @@ class FixtureLoader:
         return list(zip(self._buckets, snapshots))
 
 
+def trending_rows(
+    bucket: int, snapshot: dict[str, Any],
+) -> tuple[float, list[tuple], list[tuple]]:
+    """스냅샷 → (ts, dim rows, fact rows). rank는 items 순서(1-base)의 명시화.
+    ts = 버킷 시작 유닉스초 — 버킷당 결정적이라 재기록·백필 모두 멱등.
+    필수 키가 빠진 아이템은 KeyError를 그대로 던진다 (호출자가 스킵 판단)."""
+    ts = float(bucket * config.POLL_INTERVAL_S)
+    items = snapshot.get("items") or []
+    dims = [
+        (it["video_id"], it["title"], it["channel"], it["category_id"],
+         it["thumbnail"], it["published_at"], ts, ts)
+        for it in items
+    ]
+    facts = [
+        (it["video_id"], ts, rank, it.get("view_count"), it.get("like_count"))
+        for rank, it in enumerate(items, 1)
+    ]
+    return ts, dims, facts
+
+
+def archive_trending(bucket: int, snapshot: dict[str, Any]) -> None:
+    """정규화 이력 기록 (best-effort) — dim UPSERT + fact INSERT OR IGNORE."""
+    _ts, dims, facts = trending_rows(bucket, snapshot)
+    archive_insert(schema.UPSERT_VIDEO, dims)
+    archive_insert(schema.INSERT_STAT, facts)
+
+
 def create_collector(store: SnapshotStore) -> PollingCollector:
     fixture_path = os.environ.get(config.YT_FIXTURE_ENV)
     if fixture_path:
@@ -170,7 +197,7 @@ def create_collector(store: SnapshotStore) -> PollingCollector:
         for bucket, snapshot in pairs:
             if store.put(bucket, snapshot):
                 # 신규 버킷만 이력 아카이브 (best-effort) — 재수집 no-op 유지
-                archive_snapshot("trend", "trending", {"bucket": bucket, **snapshot})
+                archive_trending(bucket, snapshot)
 
     return PollingCollector(
         name="youtube-trending",

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 
-from ...archive import archive_insert, archive_query
+from ...archive import archive_execute, archive_insert, archive_query
 from . import schema
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def migrate_entities() -> int:
                 eid, exc_info=True,
             )
     inserted = archive_insert(schema.INSERT_EVENT, events)
-    deleted = archive_insert(schema.DELETE_MIGRATED, [()])  # 인자 없는 단일 실행
+    deleted = archive_execute(schema.DELETE_MIGRATED)
     logger.info(
         "quake migrate: %d parsed, %d inserted, %d entities rows deleted",
         len(events), inserted, deleted,

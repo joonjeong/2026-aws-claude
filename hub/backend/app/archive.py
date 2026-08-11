@@ -20,13 +20,6 @@ RETENTION_DAYS = env_int("LAB_ARCHIVE_RETENTION_DAYS", 30)
 archive = Archive(DB_PATH)
 
 
-def archive_entities(module: str, items: list[tuple[str, dict]]) -> None:
-    try:
-        archive.put_entities(module, items)
-    except Exception:  # noqa: BLE001 — best-effort: 수집 경로를 깨지 않는다
-        log.exception("archive entities failed (module=%s)", module)
-
-
 def archive_snapshot(module: str, kind: str, payload: object) -> None:
     try:
         archive.put_snapshot(module, kind, payload)
@@ -59,6 +52,14 @@ def archive_insert(sql: str, rows: list[tuple]) -> int:
         return archive.insert_rows(sql, rows)
     except Exception:  # noqa: BLE001 — best-effort
         log.exception("archive insert failed")
+        return 0
+
+
+def archive_execute(sql: str, params: tuple = ()) -> int:
+    try:
+        return archive.execute(sql, params)
+    except Exception:  # noqa: BLE001 — best-effort
+        log.exception("archive execute failed")
         return 0
 
 

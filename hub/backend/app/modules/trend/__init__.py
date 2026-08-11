@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import state
+from ...archive import archive_ensure_schema, register_prune
+from . import config, schema, state
 from .api.routes import router  # noqa: F401  (hub contract: router)
 from .collector import youtube as collector_mod
+from .migrate import migrate_snapshots
 
 META = {
     "id": "trend",
@@ -26,6 +28,9 @@ META = {
 async def startup() -> None:
     """videoCategories(hl=ko) once (failure -> default names), then start
     the PollingCollector that feeds the snapshot ring buffer."""
+    archive_ensure_schema("trend", schema.DDL, schema.TABLES)
+    register_prune("trend_video_stats", "ts", config.STATS_RETENTION_DAYS)
+    migrate_snapshots()  # snapshots 잔여분 멱등 백필 (비면 no-op)
     await collector_mod.load_category_names()
     state.collector = collector_mod.create_collector(state.store)
     state.collector.start()
