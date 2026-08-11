@@ -19,23 +19,32 @@ hub는 서빙이 목적이라 정규화본만 남기고 원본을 버리며 fact
 
 USGS 지진 피드 ──60s──▶ datalake-quake ────┐
 RSS 15개 매체 ──120s──▶ datalake-news ─────┤
-YouTube API ────60s──▶ datalake-trend ─────┤     raw/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl[.gz]
-adsb.lol ──60s·600s──▶ datalake-contrail ──┼──▶  한 줄 = {"fetched_at","source","kind","meta","payload(원본)"}
+YouTube API ────60s──▶ datalake-trend ─────┤     bronze/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl[.gz]
+adsb.lol·OpenSky ─60s·600s▶ datalake-contrail ┼─▶ 한 줄 = {"fetched_at","source","kind","meta","payload(원본)"}
 AISStream ────상시───▶ datalake-wake ──────┤     ◀── 진실의 원천 (append-only)
 yfinance·pykrx ─45s/600s▶ datalake-market ─┤                    │
 GDELT export ──900s──▶ datalake-flashpoint ┘                    │  datalake-normalize
                                                                 │  (시간당, 파티션 재작성 = 멱등)
                                                                 ▼
-                                            normalized/<table>/dt=YYYY-MM-DD/part-000.parquet
-                                            ◀── 소비용 파생 존 (zstd, pyarrow 스키마 내장)
-                                                                │
+                                            silver/<table>/dt=YYYY-MM-DD/part-000.parquet
+                                            ◀── 정규화 소비 존 (zstd, pyarrow 스키마 내장)
+                                                                │           gold/ (예약 — 집계·마트)
                           ┌─────────────────────────────────────┼──────────────────────┐
                           ▼                                     ▼                      ▼
                     DuckDB 직독                    Postgres 외부 테이블            pandas/Arrow
               read_parquet('…/*.parquet')       (pg_duckdb · parquet_s3_fdw)
 ```
 
-보조 명령: `datalake-maintenance`(일 1회 — 전일 raw gzip + 보존 프루닝).
+존 네이밍은 메달리온 아키텍처(bronze/silver/gold)를 따른다 — gold는 향후
+집계·마트·LLM 파생물용 예약, `_state/`는 one-shot 실행 간 소량 상태
+(flashpoint last_url, OpenSky 토큰 캐시). 보조 명령:
+`datalake-maintenance`(일 1회 — 전일 bronze gzip + 보존 프루닝).
+
+**다중 제공자 소스**: contrail은 상류가 2개(adsb.lol 기본 / OpenSky
+OAuth2·익명 폴백) — bronze는 kind 접두사로 경로 분리(`region_kr` vs
+`opensky_region_kr`), 포맷별 normalize(readsb/states)가 silver의 같은
+제공자 중립 테이블로 수렴하고 (icao24, ts) 키가 겹침을 병합한다.
+`--provider` 플래그 또는 `DATALAKE_CONTRAIL_PROVIDER`로 선택.
 
 ## 3. hub와의 독립성 경계
 
@@ -47,8 +56,8 @@ GDELT export ──900s──▶ datalake-flashpoint ┘                    │ 
         ▲  같은 소스를 바라보지만 코드·프로세스·저장소 완전 분리
         │  (공유 코드 0 — labkit도 v0.2에서 제거)
 ┌────────────────────── datalake (one-shot 배치) ─────────────────┐
-│  외부 소스 ─▶ 순수 클라이언트 ─▶ raw JSONL (원본 전체, 영구)       │
-│                                └─▶ normalized Parquet (파생)     │
+│  외부 소스 ─▶ 순수 클라이언트 ─▶ bronze JSONL (원본 전체, 영구)       │
+│                                └─▶ silver Parquet (파생)       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,14 +83,14 @@ shared/datalake/datalake/
 │   ├── source.py       Record 봉투 타입
 │   ├── sinks.py        FileSink (Hive 파티션 JSONL append)
 │   ├── transform.py    Record → 테이블 행 (model.py 스펙과 짝)
-│   ├── parquet.py      raw 순회 + 파티션 물질화(materialize)
+│   ├── parquet.py      bronze 순회 + 파티션 물질화(materialize)
 │   ├── stream.py       WebSocket 수집기 (백오프 재접속, connect 주입)
 │   ├── maintenance.py  gzip·보존 프루닝
 │   └── env.py          env 헬퍼
-└── tests/              51개 — 독립성 게이트·정규화 동형성·멱등성·CLI 경로
+└── tests/              56개 — 독립성 게이트·정규화 동형성·멱등성·CLI 경로
 ```
 
-## 5. 데이터 모델 (normalized 존, `model.py`)
+## 5. 데이터 모델 (silver 존, `model.py`)
 
 hub 정규화 스키마와 동형 — hub DB와 조인·비교가 쉽다. market만 JSON
 스냅샷 대신 평탄화했다. Parquet에 스키마가 내장되므로 소비자는 DDL이
@@ -105,7 +114,7 @@ hub 정규화 스키마와 동형 — hub DB와 조인·비교가 쉽다. market
   소비 측에서 `SELECT DISTINCT ON (key)`.
 - **dim 병합** = 후속 관측의 non-null 필드가 갱신, first_seen=min /
   last_seen=max — hub의 COALESCE 업서트와 동형.
-- raw만이 진실: normalized는 `datalake-normalize` 재실행으로 언제든 재생성.
+- bronze만이 진실: silver는 `datalake-normalize` 재실행으로 언제든 재생성.
 - flashpoint raw는 CAMEO 필터 **전** CSV 전문을 보존 — hub가 버리는
   이벤트도 레이크에는 남는다.
 
@@ -127,7 +136,7 @@ Temporal 스케줄 ──▶ uv run datalake-quake        (매 60s)      ┐
 ```
 
 수집 주기 권장값은 hub 폴러 기본값과 동일하다(사용자 요구). 멱등성이
-스케줄 실수를 흡수한다: 수집 재실행은 raw append일 뿐이고(정규화 시 키
+스케줄 실수를 흡수한다: 수집 재실행은 bronze append일 뿐이고(정규화 시 키
 dedup), normalize 재실행은 파티션 재작성, flashpoint는 상태 파일로 같은
 15분 파일을 스킵한다.
 
@@ -137,10 +146,10 @@ dedup), normalize 재실행은 파티션 재작성, flashpoint는 상태 파일�
 
 ```sql
 -- DuckDB (즉석 분석)
-SELECT * FROM read_parquet('data/normalized/quake_events/*/*.parquet');
+SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 
 -- Postgres: pg_duckdb 또는 parquet_s3_fdw 확장으로 외부 테이블 연결(권장)
---   normalized/<table>/dt=…  Hive 파티션 → dt 조건이 파티션 프루닝으로 동작
+--   silver/<table>/dt=…  Hive 파티션 → dt 조건이 파티션 프루닝으로 동작
 -- 확장 불가 환경: 정기 COPY 로딩 잡으로 실체화
 ```
 
@@ -155,8 +164,9 @@ SELECT * FROM read_parquet('data/normalized/quake_events/*/*.parquet');
 | YouTube 쿼터 | hub와 키 공유 시 합산 ≈ 2,880유닛/일 (기본 쿼터 10,000 내) |
 | adsb.lol | 프리셋 4개는 클라이언트가 내부 순차 1.1s 간격 준수 (병렬 4요청 → 420 실측). 스케줄 60s 미만 금지 |
 | yfinance·pykrx | 비공식 라이브러리 — 장중 45s/장외 600s 권장 스케줄로 hub와 합산 호출량 관리 |
+| OpenSky | 데이터센터 IP 차단 실측 — 클라우드에서는 adsblol 제공자 사용. 익명 모드는 감속, 60s 스케줄에는 `DATALAKE_OPENSKY_CLIENT_ID/SECRET` 인증 권장 |
 | GDELT 404 | lastupdate.txt 갱신 후 zip 게시가 늦는 경우 존재 — 코드 1 종료, 다음 스케줄이 곧 재시도 |
-| 디스크 | contrail 전세계 raw가 지배적 (일 300~400MB, gzip 후 ~40MB) — maintenance 일 1회 필수 |
+| 디스크 | contrail 전세계 bronze가 지배적 (일 300~400MB, gzip 후 ~40MB) — maintenance 일 1회 필수 |
 
 ## 9. 결정 이력
 
@@ -165,12 +175,13 @@ SELECT * FROM read_parquet('data/normalized/quake_events/*/*.parquet');
 | v0.1 | 독립 패키지 + labkit 재사용, Runner 상시 폴링, SQLite 옵션 | 최초 구현 — hub 수집과 동형 |
 | v0.2 | labkit 제거(완전 무의존) · 소스별 one-shot CLI · 스케줄링 전면 제거 | 사용자 결정: 소스별 독립 실행 명령 + Temporal 도입 예정이라 중복 기능 제거 |
 | v0.3 | SQLite 제거 · `model.py` 명시적 데이터 모델 · Parquet 정규화 존 · FDW 소비 | 사용자 결정: 파일이 인터페이스, DB는 외부 테이블(FDW)로 연결만 |
+| v0.4 | 메달리온 존 네이밍(bronze/silver/gold 예약) · contrail 다중 제공자(adsb.lol/OpenSky) | 사용자 결정: 메달리온 관례 채택 + 다중 상류 소스 대응 실증 |
 
 ## 10. 검증 상태 (2026-08-11)
 
-- 테스트 51개 통과 (`mise run datalake:test`) — 독립성 AST 게이트,
+- 테스트 56개 통과 (`mise run datalake:test`) — 독립성 AST 게이트,
   소스별 정규화의 hub 동형성, 멱등성(파티션 재작성·키 dedup), CLI 경로
-- 실호출 스모크: quake·flashpoint·contrail CLI → raw 적재 →
+- 실호출 스모크: quake·flashpoint·contrail CLI → bronze 적재 →
   `datalake-normalize`로 당일 파티션 11,680행 물질화
   (contrail_aircraft 5,217 · contrail_positions 6,121 ·
   flashpoint_events 305 · quake_events 37), pyarrow 직독으로 타입 보존 확인

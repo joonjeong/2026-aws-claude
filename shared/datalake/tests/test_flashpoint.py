@@ -87,7 +87,7 @@ async def test_fetch_dedups_same_file_across_runs(tmp_path):
             return httpx.Response(200, text=LASTUPDATE)
         return httpx.Response(200, content=csv_zip)
 
-    state = tmp_path / "state" / "flashpoint_last_url"
+    state = tmp_path / "_state" / "flashpoint_last_url"
     transport = httpx.MockTransport(handler)
 
     client = flashpoint.FlashpointClient(transport=transport, state_path=state)

@@ -1,6 +1,6 @@
 """raw → Parquet 정규화 존 물질화 (파티션 단위 재작성 = 멱등).
 
-<ROOT>/normalized/<table>/dt=YYYY-MM-DD/part-000.parquet
+<ROOT>/silver/<table>/dt=YYYY-MM-DD/part-000.parquet
 파티션 = 그 날짜(UTC)에 관측된 행. 파티션 내 dedup은 model.TableSpec의
 key/merge 규칙, 파티션 간(전역) dedup은 소비 측 몫 (설계 §5.2).
 """
@@ -31,8 +31,8 @@ def iter_raw(root: Path, date: str | None = None,
     date="YYYY-MM-DD"면 해당 dt= 파티션만.
     """
     pattern = f"*/*/dt={date or '*'}/part-*.jsonl*"
-    for path in sorted((root / "raw").glob(pattern)):
-        source = path.relative_to(root / "raw").parts[0]
+    for path in sorted((root / "bronze").glob(pattern)):
+        source = path.relative_to(root / "bronze").parts[0]
         if sources and source not in sources:
             continue
         opener = gzip.open if path.suffix == ".gz" else open
@@ -69,7 +69,7 @@ def _merge(base: dict, new: dict) -> dict:
 
 def materialize(root: Path, date: str,
                 tables: set[str] | None = None) -> dict[str, int]:
-    """해당 날짜의 raw → normalized/<table>/dt=<date>/part-000.parquet.
+    """해당 날짜의 bronze → silver/<table>/dt=<date>/part-000.parquet.
 
     파티션 파일을 통째로 다시 쓰므로 재실행이 곧 멱등. 테이블별 행 수 반환.
     """
@@ -91,7 +91,7 @@ def materialize(root: Path, date: str,
     counts: dict[str, int] = {}
     for table, rows_by_key in acc.items():
         spec = model.SPECS[table]
-        out_dir = Path(root) / "normalized" / table / f"dt={date}"
+        out_dir = Path(root) / "silver" / table / f"dt={date}"
         out_dir.mkdir(parents=True, exist_ok=True)
         arrow = pa.Table.from_pylist(list(rows_by_key.values()),
                                      schema=spec.schema)

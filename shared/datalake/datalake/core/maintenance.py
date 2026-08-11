@@ -30,7 +30,7 @@ def compress_old_partitions(root: Path, today: date | None = None) -> int:
     """
     today = today or datetime.now(timezone.utc).date()
     count = 0
-    for path in sorted((root / "raw").glob("*/*/dt=*/part-*.jsonl")):
+    for path in sorted((root / "bronze").glob("*/*/dt=*/part-*.jsonl")):
         d = _partition_date(path.parent)
         if d is None or d >= today:
             continue
@@ -53,7 +53,7 @@ def prune_old_partitions(root: Path, retention_days: int,
         return 0
     today = today or datetime.now(timezone.utc).date()
     count = 0
-    for dt_dir in sorted((root / "raw").glob("*/*/dt=*")):
+    for dt_dir in sorted((root / "bronze").glob("*/*/dt=*")):
         d = _partition_date(dt_dir)
         if d is None:
             continue

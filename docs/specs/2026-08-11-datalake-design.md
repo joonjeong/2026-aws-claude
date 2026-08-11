@@ -104,7 +104,7 @@ shared/datalake/
 Hive 스타일 파티션 + JSONL — 나중에 DuckDB/Athena/pandas로 바로 읽힌다:
 
 ```
-<DATALAKE_ROOT>/raw/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl
+<DATALAKE_ROOT>/bronze/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl
 ```
 
 한 줄 = 봉투(envelope) 하나:
@@ -126,7 +126,7 @@ Hive 스타일 파티션 + JSONL — 나중에 DuckDB/Athena/pandas로 바로 �
 
 - v0.1~0.2의 SQLite 파생 존은 제거. **DB 없음 — 파일이 인터페이스**:
   `datalake-normalize`가 raw를 읽어
-  `<ROOT>/normalized/<table>/dt=YYYY-MM-DD/part-000.parquet`로 물질화.
+  `<ROOT>/silver/<table>/dt=YYYY-MM-DD/part-000.parquet`로 물질화.
 - **데이터 모델의 단일 진실은 `datalake/model.py`** — 테이블 10개의
   pyarrow 스키마·자연키·병합 규칙. Parquet에 스키마가 내장되므로 소비자는
   DDL 없이 타입을 안다. 테이블은 hub 정규화 스키마와 동형이되 market만

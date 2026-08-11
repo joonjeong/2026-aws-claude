@@ -87,7 +87,7 @@ def test_materialize_partition_idempotent(tmp_path):
 
     # dim 병합: static의 non-null이 갱신, first/last_seen은 min/max
     vessels = pq.read_table(
-        tmp_path / "normalized/wake_vessels/dt=2026-08-11/part-000.parquet")
+        tmp_path / "silver/wake_vessels/dt=2026-08-11/part-000.parquet")
     (row,) = vessels.to_pylist()
     assert row["ship_type"] == "화물" and row["callsign"] == "AB1"
     assert row["name"] == "HANARA"
@@ -95,7 +95,7 @@ def test_materialize_partition_idempotent(tmp_path):
 
     # 스키마는 model 스펙과 동일 (파일 내장)
     quake_t = pq.read_table(
-        tmp_path / "normalized/quake_events/dt=2026-08-11/part-000.parquet")
+        tmp_path / "silver/quake_events/dt=2026-08-11/part-000.parquet")
     assert quake_t.schema.equals(model.SPECS["quake_events"].schema)
 
     # 재실행 = 파티션 재작성 = 멱등
@@ -108,7 +108,7 @@ def test_materialize_date_filter(tmp_path):
 
     counts = materialize(tmp_path, DT)
     assert counts["quake_events"] == 1
-    assert not (tmp_path / "normalized/quake_events/dt=2026-08-10").exists()
+    assert not (tmp_path / "silver/quake_events/dt=2026-08-10").exists()
 
     counts_prev = materialize(tmp_path, "2026-08-10")
     assert counts_prev["quake_events"] == 1
@@ -118,4 +118,4 @@ def test_materialize_tables_filter(tmp_path):
     FileSink(tmp_path).write([_quake_rec(), _market_rec()])
     counts = materialize(tmp_path, DT, tables={"market_quotes"})
     assert set(counts) == {"market_quotes"}
-    assert not (tmp_path / "normalized/quake_events").exists()
+    assert not (tmp_path / "silver/quake_events").exists()

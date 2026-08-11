@@ -3,7 +3,7 @@
 Parquet 파일에 스키마가 내장되므로 소비자(DuckDB·Postgres FDW·pandas)는
 이 파일 없이도 타입을 안다. 여기는 생성 측 계약: 컬럼·타입·키·병합 규칙.
 
-레이아웃: <ROOT>/normalized/<table>/dt=YYYY-MM-DD/part-000.parquet
+레이아웃: <ROOT>/silver/<table>/dt=YYYY-MM-DD/part-000.parquet
 - 파티션 의미: "그 날짜(UTC)에 **관측**된 행" — raw의 fetched_at 기준.
   같은 자연키가 여러 날짜에 걸쳐 나타날 수 있다 (예: quake 2.5_day 피드).
   전역 유일이 필요하면 소비 측에서 키로 dedup (SELECT DISTINCT ON ...).

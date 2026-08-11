@@ -52,11 +52,12 @@ def _trend(r: Record) -> dict[str, list[dict]]:
 
 
 def _contrail(r: Record) -> dict[str, list[dict]]:
-    from ..sources.contrail import normalize
+    from ..sources.contrail import normalize_for_kind
 
-    if r.kind == "global":
+    if r.kind.endswith("global"):
         return {}  # hub와 동일 — 전세계 스냅샷은 정규화 존 제외 (홍수 방지)
-    flights = normalize(r.payload, now=r.fetched_at)
+    # 제공자별 포맷(readsb/states)은 kind 접두사로 디스패치 — 같은 행으로 수렴
+    flights = normalize_for_kind(r.kind, r.payload, now=r.fetched_at)
     return {
         "contrail_aircraft": [
             {"icao24": f["id"], "callsign": f["callsign"],

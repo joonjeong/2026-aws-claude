@@ -1,6 +1,6 @@
 """싱크 — FileSink가 기본 레이크. 쓰기 실패 처리는 runner의 best-effort 계약 담당.
 
-레이아웃: <root>/raw/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl (UTC, append-only)
+레이아웃: <root>/bronze/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl (UTC, append-only)
 한 줄 = 봉투 {"fetched_at", "source", "kind", "meta", "payload"}.
 """
 
@@ -21,7 +21,7 @@ class FileSink:
 
     def _path(self, dt: datetime, r: Record) -> Path:
         return (
-            self.root / "raw" / r.source / r.kind
+            self.root / "bronze" / r.source / r.kind
             / f"dt={dt:%Y-%m-%d}" / f"part-{dt:%H}.jsonl"
         )
 

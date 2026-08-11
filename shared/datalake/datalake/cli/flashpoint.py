@@ -1,6 +1,6 @@
 """uv run datalake-flashpoint — GDELT 15분 export 1회 수집. 권장 스케줄: 900s.
 
-같은 파일 재등장은 빈 배치 — 상태 파일(<ROOT>/state/flashpoint_last_url)로
+같은 파일 재등장은 빈 배치 — 상태 파일(<ROOT>/_state/flashpoint_last_url)로
 one-shot 실행 간에도 중복을 막는다. --force로 무시 가능.
 """
 
@@ -11,7 +11,7 @@ from .. import config
 from ..sources import flashpoint
 from . import _common
 
-STATE_PATH = config.ROOT / "state" / "flashpoint_last_url"
+STATE_PATH = config.ROOT / "_state" / "flashpoint_last_url"
 
 
 async def _run(args) -> int:
