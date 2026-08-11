@@ -51,7 +51,11 @@ def _unzip_lines(blob: bytes, max_csv_bytes: int = MAX_CSV_BYTES) -> list[str]:
 
 async def fetch_latest() -> list[dict]:
     global _last_url
-    async with httpx.AsyncClient(timeout=config.FETCH_TIMEOUT_S) as client:
+    # follow_redirects=False 명시: 프리픽스 검증을 통과한 URL이 리다이렉트로
+    # 임의 호스트에 닿는 우회를 차단 (httpx 기본값이지만 방어선이므로 고정)
+    async with httpx.AsyncClient(
+        timeout=config.FETCH_TIMEOUT_S, follow_redirects=False
+    ) as client:
         resp = await client.get(config.LASTUPDATE_URL)
         resp.raise_for_status()
         url = pick_export_url(resp.text)
