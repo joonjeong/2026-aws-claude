@@ -10,8 +10,8 @@ import logging
 import httpx
 from labkit import PollingCollector
 
-from ...archive import archive_entities
-from . import config
+from ...archive import archive_insert
+from . import config, schema
 from .store import store
 
 logger = logging.getLogger(__name__)
@@ -69,8 +69,11 @@ async def fetch_feed() -> list[dict]:
 
 def _on_result(events: list[dict]) -> None:
     store.ingest(events)
-    # 이력 아카이브 (best-effort) — id PK의 INSERT OR IGNORE가 재관측을 걸러낸다
-    archive_entities("quake", [(e["id"], e) for e in events])
+    # 정규화 아카이브 (best-effort) — id PK의 INSERT OR IGNORE가 재관측을 걸러낸다
+    archive_insert(schema.INSERT_EVENT, [
+        (e["id"], e["mag"], e["place"], e["time"], e["lon"], e["lat"], e["depth_km"])
+        for e in events
+    ])
 
 
 collector = PollingCollector(
