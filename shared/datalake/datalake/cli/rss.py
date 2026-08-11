@@ -12,11 +12,12 @@ from . import _common
 
 
 async def _run(args) -> int:
+    root = _common.resolve_root(args)
     feed_ids = args.feeds.split(",") if args.feeds else None
-    sinks = _common.build_sinks()
+    sinks = _common.build_sinks(root)
     try:
         records = await rss.fetch_all(feed_ids)
-        _common.report("rss", _common.emit(sinks, records))
+        _common.report("rss", _common.emit(sinks, records), root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK

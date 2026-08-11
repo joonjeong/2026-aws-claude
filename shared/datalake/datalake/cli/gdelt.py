@@ -6,19 +6,17 @@ one-shot 실행 간에도 중복을 막는다. --force로 무시 가능.
 
 from __future__ import annotations
 
-from .. import config
 from ..sources import gdelt
 from . import _common
 
-STATE_PATH = config.ROOT / "_state" / "gdelt_last_url"
-
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks()
+    root = _common.resolve_root(args)
+    sinks = _common.build_sinks(root)
     try:
-        client = gdelt.build(state_path=STATE_PATH)
+        client = gdelt.build(state_path=root / "_state" / "gdelt_last_url")
         records = await client.fetch(force=args.force)
-        _common.report("gdelt", _common.emit(sinks, records))
+        _common.report("gdelt", _common.emit(sinks, records), root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK

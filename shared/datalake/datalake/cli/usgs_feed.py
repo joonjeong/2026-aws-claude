@@ -7,10 +7,11 @@ from . import _common
 
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks()
+    root = _common.resolve_root(args)
+    sinks = _common.build_sinks(root)
     try:
         records = await usgs_feed.build().fetch()
-        _common.report("usgs_feed", _common.emit(sinks, records))
+        _common.report("usgs_feed", _common.emit(sinks, records), root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK

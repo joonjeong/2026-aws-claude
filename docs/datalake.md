@@ -17,29 +17,37 @@ hub는 서빙이 목적이라 정규화본만 남기고 원본을 버리며 fact
 ```
 [외부 소스]                [one-shot CLI (uv run …)]        [데이터레이크 DATALAKE_ROOT]
 
-USGS 지진 피드 ──60s──▶ datalake-usgs-feed ─┐
+USGS 지진 피드 ──60s──▶ datalake-usgs-feed ─┐   각 수집 명령이 두 존을 동시 랜딩 (--output <root>)
 RSS 매체 15개 ──120s──▶ datalake-rss (목록 파일) ┤
-YouTube API ────60s──▶ datalake-youtube ─────┤   bronze/<source>/<kind>/dt=YYYY-MM-DD/part-HH.jsonl[.gz]
-adsb.lol ──60s·600s──▶ datalake-adsblol ─────┼─▶ 한 줄 = {"fetched_at","source","kind","meta","payload(원본)"}
-OpenSky ───60s·600s──▶ datalake-opensky ─────┤   source = 상류, kind = 데이터셋 ◀── 진실의 원천
-AISStream ────상시───▶ datalake-aisstream ───┤                  │
-yfinance ──45s/600s──▶ datalake-yfinance ────┤                  │  datalake-normalize
-pykrx ─────45s/600s──▶ datalake-pykrx ───────┤                  │  (시간당, 파티션 재작성 = 멱등)
-GDELT export ──900s──▶ datalake-gdelt ───────┘                  │
+YouTube API ────60s──▶ datalake-youtube ─────┤   ① landing/<source>/<kind>/dt=…/part-HH.jsonl[.gz]
+adsb.lol ──60s·600s──▶ datalake-adsblol ─────┼─▶    원본 봉투 그대로 ◀── 진실의 원천 (불변)
+OpenSky ───60s·600s──▶ datalake-opensky ─────┤   ② bronze/<table>/dt=…/part-HH.jsonl
+AISStream ────상시───▶ datalake-aisstream ───┤      약간의 ETL: 파싱·타입화 행 append (중복 허용)
+yfinance ──45s/600s──▶ datalake-yfinance ────┤                  │
+pykrx ─────45s/600s──▶ datalake-pykrx ───────┤                  │  datalake-silver
+GDELT export ──900s──▶ datalake-gdelt ───────┘                  │  (얇은 배치: dedup·컬럼화만,
+                                                                │   파싱 없음 — 파티션 재작성 = 멱등)
                                                                 ▼
                                             silver/<table>/dt=YYYY-MM-DD/part-000.parquet
-                                            ◀── 정규화 소비 존 (zstd, pyarrow 스키마 내장)
+                                            ◀── 정합 소비 존 (zstd, pyarrow 스키마 내장)
                                                                 │           gold/ (예약 — 집계·마트)
                           ┌─────────────────────────────────────┼──────────────────────┐
                           ▼                                     ▼                      ▼
                     DuckDB 직독                    Postgres 외부 테이블            pandas/Arrow
               read_parquet('…/*.parquet')       (pg_duckdb · parquet_s3_fdw)
+
+보조: datalake-bronze (landing→bronze 재파생 — ETL 수정 후 복구용, 멱등)
 ```
 
-존 네이밍은 메달리온 아키텍처(bronze/silver/gold)를 따른다 — gold는 향후
-집계·마트·LLM 파생물용 예약, `_state/`는 one-shot 실행 간 소량 상태
-(flashpoint last_url, OpenSky 토큰 캐시). 보조 명령:
-`datalake-maintenance`(일 1회 — 전일 bronze gzip + 보존 프루닝).
+존 의미는 일반적 메달리온과 1:1 정합한다(v0.8): **landing**=원본 바이트
+(진실의 원천) · **bronze**=무가공 파싱 레코드(1:1, append, 중복 허용) ·
+**silver**=dedup·정합 Parquet · **gold**=예약(집계·마트·LLM 파생물).
+`_state/`는 one-shot 실행 간 소량 상태(gdelt last_url, OpenSky 토큰 캐시).
+보조 명령: `datalake-maintenance`(일 1회 — landing·bronze 전일 gzip + 보존).
+
+**작업 분해(v0.8)**: 구 normalize가 하던 파싱(비쌈)은 각 수집 명령이 자기
+fetch분만 1회 수행해 bronze로 랜딩하고, silver 단계는 dedup·컬럼화만 남아
+얇아졌다 — "매시간 그날 전체 재파싱" 구조가 해소됐다.
 
 **봉투 의미론 (v0.5~0.6)**: `source` = 실제 상류(usgs_feed, bbc, adsblol …),
 `kind` = 생산 데이터셋(quake, news, contrail_region_kr …). 명령도 상류
@@ -119,32 +127,33 @@ hub 정규화 스키마와 동형 — hub DB와 조인·비교가 쉽다. market
   소비 측에서 `SELECT DISTINCT ON (key)`.
 - **dim 병합** = 후속 관측의 non-null 필드가 갱신, first_seen=min /
   last_seen=max — hub의 COALESCE 업서트와 동형.
-- bronze만이 진실: silver는 `datalake-normalize` 재실행으로 언제든 재생성.
-- flashpoint raw는 CAMEO 필터 **전** CSV 전문을 보존 — hub가 버리는
+- landing만이 진실: bronze는 `datalake-bronze`로, silver는 `datalake-silver`로 재생성.
+- gdelt landing은 CAMEO 필터 **전** CSV 전문을 보존 — hub가 버리는
   이벤트도 레이크에는 남는다.
 
-## 6. 운영 모델 — 스케줄링은 오케스트레이터 소유
+## 6. 운영 모델 — 스케줄링은 외부 스케줄러 소유
 
-datalake에는 스케줄러·재시도·백오프가 **없다**. 향후 Temporal이 배치를
-소유한다는 전제로 중복 기능을 제거했고, 계약은 종료 코드뿐이다:
+datalake에는 스케줄러·재시도·백오프가 **없다**. 어떤 스케줄러든(cron,
+Temporal, …) 아래 명령을 주기 실행하면 되고, 계약은 종료 코드뿐이다.
+모든 명령이 `--output <root>`를 받아 조립 위치도 자유다:
 
 ```
-Temporal 스케줄 ──▶ uv run datalake-usgs-feed    (매 60s)      ┐
+외부 스케줄러 ──▶ uv run datalake-usgs-feed    (매 60s)      ┐
                ──▶ uv run datalake-rss           (매 120s)     │ 종료 코드 계약
                ──▶ uv run datalake-youtube       (매 60s)      │   0 = 성공(0건 포함)
                ──▶ uv run datalake-adsblol --scope regions (60s) / global (600s)
                ──▶ uv run datalake-opensky --scope … (동일)    │   1 = 실패 → 재시도는
-               ──▶ uv run datalake-yfinance      (장중 45s/장외 600s)   Temporal 정책
+               ──▶ uv run datalake-yfinance      (장중 45s/장외 600s)   스케줄러 정책
                ──▶ uv run datalake-pykrx         (장중 45s/장외 600s)
                ──▶ uv run datalake-gdelt         (매 900s)     │   2 = 상류 비활성
                ──▶ uv run datalake-aisstream --duration N (겹침 없는 구간)  (키·엑스트라 부재)
-               ──▶ uv run datalake-normalize     (매시 + 자정 후 전일 확정)
+               ──▶ uv run datalake-silver        (매시 + 자정 후 전일 확정)
                ──▶ uv run datalake-maintenance   (일 1회)      ┘
 ```
 
 수집 주기 권장값은 hub 폴러 기본값과 동일하다(사용자 요구). 멱등성이
-스케줄 실수를 흡수한다: 수집 재실행은 bronze append일 뿐이고(정규화 시 키
-dedup), normalize 재실행은 파티션 재작성, flashpoint는 상태 파일로 같은
+스케줄 실수를 흡수한다: 수집 재실행은 landing·bronze append일 뿐이고(silver가 키
+dedup), silver 재실행은 파티션 재작성, flashpoint는 상태 파일로 같은
 15분 파일을 스킵한다.
 
 ## 7. Postgres/FDW 소비
@@ -186,6 +195,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.5 | 봉투 의미 반전: source=상류·kind=데이터셋 · 명령 25개를 상류 단위로 재편(usgs-feed, bbc, adsblol, yfinance, pykrx …) | 사용자 결정: 상류가 수집의 단위 — kind 접두사 편법 제거, 저장 프로토콜(봉투)로 통일 |
 | v0.6 | RSS 단일 명령(`datalake-rss`) + 목록 파일(rss_feeds.toml) 관리. 사설·표준-준(準) 상류는 개별 명령 유지 | 사용자 결정: 표준 포맷은 클라이언트가 제네릭 — 대상 관리는 코드가 아닌 목록으로 |
 | v0.7 | market 심볼 목록 파일(market_symbols.toml) + yfinance·pykrx 기본 의존성 승격(extra 폐지) | 사용자 결정: 대상은 목록으로, extra 미설치=코드 2 함정 제거 — 전 상류 실수집 검증 완료 |
+| v0.8 | landing/bronze 분리: 수집 명령이 경량 ETL까지 수행해 bronze(파싱 레코드) 랜딩, silver는 dedup·컬럼화만(구 normalize 분해). 전 명령 `--output` 파라미터 | 사용자 결정: normalize 비대 해소 + 존 의미를 일반적 메달리온과 정합 (landing=원본, bronze=무가공 테이블) |
 
 ## 10. 검증 상태 (2026-08-11)
 

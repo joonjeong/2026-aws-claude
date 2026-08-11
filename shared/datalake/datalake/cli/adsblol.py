@@ -12,7 +12,8 @@ from . import _common
 
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks()
+    root = _common.resolve_root(args)
+    sinks = _common.build_sinks(root)
     client = adsblol.build()
     try:
         records = []
@@ -20,7 +21,7 @@ async def _run(args) -> int:
             records.extend(await client.fetch_global())
         if args.scope in ("regions", "both"):
             records.extend(await client.fetch_regions())
-        _common.report("adsblol", _common.emit(sinks, records))
+        _common.report("adsblol", _common.emit(sinks, records), root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK

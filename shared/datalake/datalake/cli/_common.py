@@ -1,25 +1,40 @@
-"""CLI 공용 — 인자·로깅·싱크 조립·배출. 싱크 실패는 best-effort(로그만)."""
+"""CLI 공용 — 인자·로깅·싱크 조립·배출. 싱크 실패는 best-effort(로그만).
+
+모든 명령은 --output <root>로 레이크 루트를 지정할 수 있다
+(기본: env DATALAKE_ROOT = shared/datalake/data).
+수집 명령의 싱크는 landing(원본) + bronze(파싱 레코드) 두 개다.
+"""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import logging
+from pathlib import Path
 from typing import Awaitable, Sequence
 
 from .. import config
-from ..core.sinks import FileSink
+from ..core.sinks import BronzeSink, LandingSink
 from ..core.source import Record
 
 log = logging.getLogger("datalake.cli")
 
 EXIT_OK = 0
 EXIT_ERROR = 1
-EXIT_DISABLED = 2  # 키·엑스트라 부재 — 오케스트레이터가 구분할 수 있게
+EXIT_DISABLED = 2  # 키 부재 등으로 상류 비활성 — 스케줄러가 구분할 수 있게
 
 
 def base_parser(prog: str, description: str) -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(prog=prog, description=description)
+    parser = argparse.ArgumentParser(prog=prog, description=description)
+    parser.add_argument(
+        "--output", default=None, metavar="ROOT",
+        help="레이크 루트 경로 (기본: env DATALAKE_ROOT=shared/datalake/data)",
+    )
+    return parser
+
+
+def resolve_root(args) -> Path:
+    return Path(args.output) if getattr(args, "output", None) else config.ROOT
 
 
 def setup_logging() -> None:
@@ -32,7 +47,7 @@ def setup_logging() -> None:
 def run_async(coro: Awaitable[int]) -> int:
     """CLI 진입 공용 러너 — 실패는 간결한 에러 로그 + 종료 코드 1.
 
-    재시도·백오프는 넣지 않는다: 오케스트레이터(Temporal 예정) 소유.
+    재시도·백오프는 넣지 않는다: 외부 스케줄러 소유.
     """
     setup_logging()
     try:
@@ -44,9 +59,9 @@ def run_async(coro: Awaitable[int]) -> int:
         return EXIT_ERROR
 
 
-def build_sinks() -> list:
-    # 수집은 raw 존에만 쓴다 — 정규화는 datalake-normalize가 배치로 물질화
-    return [FileSink(config.ROOT)]
+def build_sinks(root: Path) -> list:
+    # 수집 = landing(원본 봉투) + bronze(약간의 ETL — 파싱 레코드)
+    return [LandingSink(root), BronzeSink(root)]
 
 
 def emit(sinks: Sequence, records: Sequence[Record]) -> int:
@@ -69,5 +84,5 @@ def close_sinks(sinks: Sequence) -> None:
             close()
 
 
-def report(source: str, n: int) -> None:
-    log.info("[%s] %d개 레코드 → %s", source, n, config.ROOT)
+def report(source: str, n: int, root: Path) -> None:
+    log.info("[%s] %d개 레코드 → %s", source, n, root)

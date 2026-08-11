@@ -7,22 +7,21 @@ DATALAKE_OPENSKY_CLIENT_ID/SECRET 설정 시 인증, 없으면 익명 감속 모
 
 from __future__ import annotations
 
-from .. import config
 from ..sources import opensky
 from . import _common
 
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks()
-    client = opensky.build(
-        state_path=config.ROOT / "_state" / "opensky_token.json")
+    root = _common.resolve_root(args)
+    sinks = _common.build_sinks(root)
+    client = opensky.build(state_path=root / "_state" / "opensky_token.json")
     try:
         records = []
         if args.scope in ("global", "both"):
             records.extend(await client.fetch_global())
         if args.scope in ("regions", "both"):
             records.extend(await client.fetch_regions())
-        _common.report("opensky", _common.emit(sinks, records))
+        _common.report("opensky", _common.emit(sinks, records), root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK

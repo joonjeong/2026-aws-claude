@@ -59,10 +59,11 @@ async def _run(args) -> int:
     if client is None:
         log.error("aisstream 비활성: DATALAKE_AIS_KEY 미설정 (전용 키 필요)")
         return _common.EXIT_DISABLED
-    sinks = _common.build_sinks()
+    root = _common.resolve_root(args)
+    sinks = _common.build_sinks(root)
     try:
         n = await run_stream(client, sinks, args.duration, config.FLUSH_S)
-        _common.report("aisstream", n)
+        _common.report("aisstream", n, root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK

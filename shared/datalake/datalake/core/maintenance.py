@@ -1,7 +1,8 @@
 """레이크 유지보수 — 전일 파티션 gzip 압축 + 보존기간 프루닝 (일 1회 잡).
 
-contrail 전세계 raw가 지배적(일 300~400MB) — gzip으로 약 1/10 (설계 §5.1).
-오늘(UTC) 파티션은 쓰기 중이므로 절대 건드리지 않는다.
+대상 존: landing(원본 — adsblol 전세계가 지배적, gzip 약 1/10)과
+bronze(파싱 레코드 JSONL). 오늘(UTC) 파티션은 쓰기 중이므로 건드리지 않는다.
+silver는 Parquet(이미 압축)이라 대상 아님.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 log = logging.getLogger("datalake.maintenance")
+
+ZONES = ("landing", "bronze")
 
 
 def _partition_date(dt_dir: Path) -> date | None:
@@ -30,7 +33,9 @@ def compress_old_partitions(root: Path, today: date | None = None) -> int:
     """
     today = today or datetime.now(timezone.utc).date()
     count = 0
-    for path in sorted((root / "bronze").glob("*/*/dt=*/part-*.jsonl")):
+    paths = [p for zone in ZONES
+             for p in (root / zone).glob("**/dt=*/part-*.jsonl")]
+    for path in sorted(paths):
         d = _partition_date(path.parent)
         if d is None or d >= today:
             continue
@@ -53,7 +58,9 @@ def prune_old_partitions(root: Path, retention_days: int,
         return 0
     today = today or datetime.now(timezone.utc).date()
     count = 0
-    for dt_dir in sorted((root / "bronze").glob("*/*/dt=*")):
+    dirs = [d for zone in ZONES for d in (root / zone).glob("**/dt=*")
+            if d.is_dir()]
+    for dt_dir in sorted(dirs):
         d = _partition_date(dt_dir)
         if d is None:
             continue

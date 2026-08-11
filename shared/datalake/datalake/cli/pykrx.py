@@ -14,11 +14,12 @@ log = logging.getLogger("datalake.cli")
 
 
 async def _run(args) -> int:
+    root = _common.resolve_root(args)
     client = pykrx.build()
-    sinks = _common.build_sinks()
+    sinks = _common.build_sinks(root)
     try:
         records = await client.fetch()
-        _common.report("pykrx", _common.emit(sinks, records))
+        _common.report("pykrx", _common.emit(sinks, records), root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK

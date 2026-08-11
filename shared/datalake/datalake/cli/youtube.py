@@ -14,14 +14,15 @@ log = logging.getLogger("datalake.cli")
 
 
 async def _run(args) -> int:
+    root = _common.resolve_root(args)
     client = youtube.build()
     if client is None:
         log.error("youtube 비활성: YT_API_KEY 미설정")
         return _common.EXIT_DISABLED
-    sinks = _common.build_sinks()
+    sinks = _common.build_sinks(root)
     try:
         records = await client.fetch()
-        _common.report("youtube", _common.emit(sinks, records))
+        _common.report("youtube", _common.emit(sinks, records), root)
     finally:
         _common.close_sinks(sinks)
     return _common.EXIT_OK
