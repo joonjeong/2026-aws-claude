@@ -29,6 +29,16 @@ User-Agent(`NewsroomLens/0.1`)로 curl 검증하고 확인일을 주석으로 �
 - 서버 기동 → 첫 수집 사이클 후 `/healthz`의 news.sources에 15개 전부
   `last_success` 기록 확인. 실패 소스가 있으면 해당 항목 조정 또는 보류.
 
+## 실수집 검증 후 조정 (2026-08-11)
+
+- **SBS**: TopRssFeed(주요뉴스)가 등록 당일 404로 소멸(일시 200 후 불안정).
+  섹션 피드만 유효 → 프레임 비교 가치가 가장 큰 정치(sectionId=01)로 조정.
+- **WaPo**: 비브라우저 UA를 403으로 차단(compatible 토큰 포함). 피드 리더
+  관행대로 소스별 `user_agent` 오버라이드 필드를 도입 — collector
+  `fetch_articles`에 1줄(`source.get("user_agent") or USER_AGENT`) 추가.
+  "config 단일 파일" 범위의 유일한 예외.
+- 조정 후 15/15 수집 확인 (SBS 15건, WaPo 4건 — world 피드 특성상 소량).
+
 ## 검증된 피드 (2026-08-11, collector UA로 HTTP 200 + RSS 확인)
 
 | id | 매체 | lang | URL |
@@ -36,7 +46,7 @@ User-Agent(`NewsroomLens/0.1`)로 curl 검증하고 확인일을 주석으로 �
 | hani | 한겨레 전체 | ko | https://www.hani.co.kr/rss/ |
 | khan | 경향신문 전체 | ko | https://www.khan.co.kr/rss/rssdata/total_news.xml |
 | chosun | 조선일보 전체 | ko | https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml |
-| sbs | SBS 주요뉴스 | ko | https://news.sbs.co.kr/news/TopRssFeed.do?plink=RSSREADER |
+| sbs | SBS 뉴스(정치) | ko | https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01 |
 | mk | 매일경제 | ko | https://www.mk.co.kr/rss/40300001/ |
 | hankyung | 한국경제 경제 | ko | https://www.hankyung.com/feed/economy |
 | npr | NPR Top Stories | en | https://feeds.npr.org/1001/rss.xml |

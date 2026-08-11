@@ -77,8 +77,10 @@ def normalize_entries(source_id: str, parsed: Any) -> list[dict]:
 async def fetch_articles(source: dict) -> list[dict]:
     """One polling cycle for one source. Raises on HTTP/parse failure —
     the owning PollingCollector records the error and retries next cycle."""
+    # 소스별 UA 오버라이드: 일부 매체(WaPo)는 비브라우저 UA를 403으로 차단
+    user_agent = source.get("user_agent") or USER_AGENT
     async with httpx.AsyncClient(
-        timeout=20.0, follow_redirects=True, headers={"User-Agent": USER_AGENT}
+        timeout=20.0, follow_redirects=True, headers={"User-Agent": user_agent}
     ) as client:
         resp = await client.get(source["rss_url"])
         resp.raise_for_status()
