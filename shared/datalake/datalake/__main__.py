@@ -21,6 +21,11 @@ def _build_runner(sources_arg: str | None) -> Runner:
     if not polls and not streams:
         log.warning("활성 소스가 없습니다 (키/엑스트라 확인)")
     sinks: list = [FileSink(config.ROOT)]
+    if config.SQLITE_ENABLED:
+        from .core.sqlite_sink import SqliteSink
+
+        sinks.append(SqliteSink(config.DB_PATH))
+        log.info("SQLite 옵션 존 활성: %s", config.DB_PATH)
     return Runner(polls, streams, sinks, flush_s=config.FLUSH_S)
 
 
@@ -49,12 +54,24 @@ def main(argv: list[str] | None = None) -> int:
                        help="쉼표 구분 소스 선택 (기본: 전체)")
     run_p.add_argument("--once", action="store_true",
                        help="poll 소스 1회 수집 후 종료 (스모크용)")
+    rebuild_p = sub.add_parser(
+        "rebuild", help="raw 레이크 → SQLite 재구축 (멱등)")
+    rebuild_p.add_argument("--sources", default=None,
+                           help="쉼표 구분 소스 선택 (기본: 전체)")
     args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    if args.cmd == "rebuild":
+        from .core.sqlite_sink import rebuild
+
+        selected = ({s.strip() for s in args.sources.split(",")}
+                    if args.sources else None)
+        n = rebuild(config.ROOT, config.DB_PATH, sources=selected)
+        log.info("rebuild 완료: %d개 레코드 → %s", n, config.DB_PATH)
+        return 0
     try:
         return asyncio.run(_run(args))
     except KeyboardInterrupt:

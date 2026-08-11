@@ -16,3 +16,7 @@ ROOT = Path(os.environ.get("DATALAKE_ROOT", str(_DEFAULT_ROOT)))
 
 # 스트림 소스 버퍼 플러시 주기
 FLUSH_S = env_float("DATALAKE_FLUSH_S", 10.0)
+
+# SQLite 옵션 존 (설계 §5.2) — raw가 진실의 원천, DB는 파생
+SQLITE_ENABLED = os.environ.get("DATALAKE_SQLITE", "0") == "1"
+DB_PATH = Path(os.environ.get("DATALAKE_DB_PATH", str(ROOT / "datalake.db")))
