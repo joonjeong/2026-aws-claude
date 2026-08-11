@@ -7,13 +7,15 @@ DATALAKE_RAW_RETENTION_DAYS(기본 0 = 무제한). 오늘(UTC) 파티션은 쓰�
 
 from __future__ import annotations
 
-import argparse
 import gzip
 import logging
 import os
 import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
 
 log = logging.getLogger("datalake.maintenance")
 
@@ -70,22 +72,23 @@ def prune_old_partitions(root: Path, retention_days: int,
     return len(expired)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-maintenance", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    args = parser.parse_args(argv)
+def cli(output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None) -> None:
+    """landing·bronze 전일 파티션 gzip + 보존 프루닝."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    root = Path(args.output) if args.output else DEFAULT_ROOT
+    root = output or DEFAULT_ROOT
     compressed = (compress_old_partitions(root)
                   if os.environ.get("DATALAKE_COMPRESS", "1") == "1" else 0)
     pruned = prune_old_partitions(
         root, int(os.environ.get("DATALAKE_RAW_RETENTION_DAYS", "0")))
     log.info("maintenance 완료: 압축 %d개, 프루닝 %d개 → %s",
              compressed, pruned, root)
-    return 0
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

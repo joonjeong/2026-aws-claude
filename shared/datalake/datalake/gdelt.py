@@ -9,7 +9,6 @@ CAMEO 루트 14~20 필터(순수 map/filter) → bronze/flashpoint_events.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import calendar
 import io
@@ -20,8 +19,11 @@ import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated, Optional
 
 import httpx
+import typer
+from pydantic import BaseModel, BeforeValidator
 
 log = logging.getLogger("datalake.gdelt")
 
@@ -67,22 +69,46 @@ def unzip_text(blob: bytes) -> str:
     return zf.read(info).decode("utf8", "ignore")
 
 
-# ── 순수 파싱 (hub flashpoint normalize와 동일 의미) ─────────────────
-def _num(raw, cast):
-    try:
-        return cast(raw)
-    except (TypeError, ValueError):
-        return None
+# ── 순수 파싱 — 옵셔널 캐스팅·정리는 pydantic 필드 선언으로 ──────────
+def _opt(cast):
+    """캐스팅 실패 → None (구 _num 이디엄의 선언형 버전)."""
+    def f(v):
+        try:
+            return cast(v)
+        except (TypeError, ValueError):
+            return None
+    return BeforeValidator(f)
 
 
-def _text(raw) -> str | None:
-    s = raw.strip()
-    return s or None
+OptInt = Annotated[Optional[int], _opt(int)]
+OptFloat = Annotated[Optional[float], _opt(float)]
+OptText = Annotated[Optional[str],
+                    BeforeValidator(lambda v: (v.strip() or None)
+                                    if isinstance(v, str) else None)]
+HttpUrl = Annotated[Optional[str],
+                    BeforeValidator(lambda v: v.strip()
+                                    if isinstance(v, str)
+                                    and v.strip().startswith(("http://", "https://"))
+                                    else None)]  # href XSS 차단
 
 
-def _url_or_none(raw) -> str | None:
-    s = raw.strip()
-    return s if s.startswith(("http://", "https://")) else None  # href XSS 차단
+class FlashpointEvent(BaseModel):
+    event_id: int
+    ts: float
+    event_day: OptText = None
+    code: OptText = None
+    root: str
+    quad: OptInt = None
+    goldstein: OptFloat = None
+    mentions: OptInt = None
+    articles: OptInt = None
+    tone: OptFloat = None
+    actor1: OptText = None
+    actor2: OptText = None
+    lat: float
+    lon: float
+    country: OptText = None
+    source_url: HttpUrl = None
 
 
 def _ts(dateadded: str) -> float:
@@ -98,22 +124,15 @@ def to_event(line: str) -> dict | None:
         c = line.split("\t")
         if len(c) < 61 or c[_ROOT] not in ROOTS or not c[_LAT] or not c[_LON]:
             return None
-        event_id = _num(c[_ID], int)
-        if event_id is None:
-            return None
-        return {
-            "event_id": event_id, "ts": _ts(c[_DATEADDED]),
-            "event_day": c[_SQLDATE] or None, "code": c[_CODE] or None,
-            "root": c[_ROOT], "quad": _num(c[_QUAD], int),
-            "goldstein": _num(c[_GOLDSTEIN], float),
-            "mentions": _num(c[_MENTIONS], int),
-            "articles": _num(c[_ARTICLES], int), "tone": _num(c[_TONE], float),
-            "actor1": _text(c[_ACTOR1]), "actor2": _text(c[_ACTOR2]),
-            "lat": float(c[_LAT]), "lon": float(c[_LON]),
-            "country": _text(c[_COUNTRY]), "source_url": _url_or_none(c[_URL]),
-        }
-    except Exception:  # 행 단위 격리
-        log.warning("skipping malformed gdelt row", exc_info=True)
+        return FlashpointEvent(
+            event_id=c[_ID], ts=_ts(c[_DATEADDED]), event_day=c[_SQLDATE],
+            code=c[_CODE], root=c[_ROOT], quad=c[_QUAD],
+            goldstein=c[_GOLDSTEIN], mentions=c[_MENTIONS],
+            articles=c[_ARTICLES], tone=c[_TONE], actor1=c[_ACTOR1],
+            actor2=c[_ACTOR2], lat=c[_LAT], lon=c[_LON],
+            country=c[_COUNTRY], source_url=c[_URL],
+        ).model_dump()
+    except Exception:  # 행 단위 격리 (event_id 비정상 포함)
         return None
 
 
@@ -183,24 +202,25 @@ async def collect(root: Path, force: bool = False,
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-gdelt", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    parser.add_argument("--force", action="store_true",
-                        help="상태 파일 무시하고 최신 파일 재수집")
-    args = parser.parse_args(argv)
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    force: Annotated[bool, typer.Option(
+        "--force", help="상태 파일 무시하고 최신 파일 재수집")] = False,
+) -> None:
+    """GDELT 15분 export 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        return asyncio.run(collect(
-            Path(args.output) if args.output else DEFAULT_ROOT, args.force))
-    except KeyboardInterrupt:
-        return 0
+        asyncio.run(collect(output or DEFAULT_ROOT, force))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
-        return 1
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

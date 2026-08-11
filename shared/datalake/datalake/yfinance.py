@@ -9,7 +9,6 @@ landing/yfinance/market_* + bronze/market_quotes (평탄화).
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import logging
@@ -19,6 +18,9 @@ import tomllib
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
 
 log = logging.getLogger("datalake.yfinance")
 
@@ -170,25 +172,26 @@ async def collect(root: Path, kinds: list[str] | None = None,
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-yfinance", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    parser.add_argument("--kinds", default=None,
-                        help=f"쉼표 구분 선택 (기본 전체: {','.join(KINDS)})")
-    args = parser.parse_args(argv)
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    kinds: Annotated[Optional[str], typer.Option(
+        help="쉼표 구분 선택 (기본 전체: market_overview,market_quotes_us)")] = None,
+) -> None:
+    """Yahoo Finance 시세 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        return asyncio.run(collect(
-            Path(args.output) if args.output else DEFAULT_ROOT,
-            args.kinds.split(",") if args.kinds else None))
-    except KeyboardInterrupt:
-        return 0
+        asyncio.run(collect(output or DEFAULT_ROOT,
+                            kinds.split(",") if kinds else None))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
-        return 1
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

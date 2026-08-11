@@ -8,14 +8,18 @@ landing/aisstream/wake + bronze/wake_vessels·wake_positions.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import logging
 import os
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
+from pydantic import BaseModel, BeforeValidator
 
 log = logging.getLogger("datalake.aisstream")
 
@@ -56,41 +60,62 @@ def ship_type_label(code) -> str:
             "탱커" if 80 <= code <= 89 else "기타")
 
 
-def _name(raw) -> str | None:
-    name = str(raw).strip() if raw else ""
-    return name or None
+# 센티널·정리는 pydantic 필드 선언으로 (BeforeValidator 이디엄)
+def _sentinel(*bad):
+    """AIS '값 없음' 센티널 → None."""
+    return BeforeValidator(lambda v: None if v in bad else v)
+
+
+OptName = Annotated[Optional[str],
+                    BeforeValidator(lambda v: (str(v).strip() or None) if v else None)]
+
+
+class WakePosition(BaseModel):
+    mmsi: str
+    ts: float
+    lon: float
+    lat: float
+    sog_kn: Annotated[Optional[float], _sentinel(None, 102.3)] = None
+    cog_deg: Annotated[Optional[float], _sentinel(None, 360.0)] = None
+    heading_deg: Annotated[Optional[float], _sentinel(None, 511)] = None
+
+
+class WakeVessel(BaseModel):
+    mmsi: str
+    name: OptName = None
+    ship_type: Optional[str] = None
+    callsign: OptName = None
+    first_seen: float
+    last_seen: float
 
 
 def to_vessel_and_position(msg: dict, now: float) -> dict[str, list[dict]]:
-    """AIS 메시지 → bronze 행들. 센티널(Sog 102.3/Cog 360/Heading 511)→None."""
-    mtype = msg.get("MessageType")
+    """AIS 메시지 → bronze 행들 (센티널 처리는 모델이 담당)."""
     meta = msg.get("MetaData") or {}
     mmsi = meta.get("MMSI")
     if mmsi is None:
         return {}
+    mtype = msg.get("MessageType")
     if mtype == "PositionReport":
         body = ((msg.get("Message") or {}).get("PositionReport")) or {}
-        lat, lon = body.get("Latitude"), body.get("Longitude")
-        if lat is None or lon is None:
+        if body.get("Latitude") is None or body.get("Longitude") is None:
             return {}
-        sog, cog, heading = body.get("Sog"), body.get("Cog"), body.get("TrueHeading")
         return {
-            "wake_vessels": [{"mmsi": str(mmsi), "name": _name(meta.get("ShipName")),
-                              "ship_type": None, "callsign": None,
-                              "first_seen": now, "last_seen": now}],
-            "wake_positions": [{"mmsi": str(mmsi), "ts": now,
-                                "lon": float(lon), "lat": float(lat),
-                                "sog_kn": None if sog in (None, 102.3) else float(sog),
-                                "cog_deg": None if cog in (None, 360.0) else float(cog),
-                                "heading_deg": None if heading in (None, 511) else float(heading)}],
+            "wake_vessels": [WakeVessel(
+                mmsi=str(mmsi), name=meta.get("ShipName"),
+                first_seen=now, last_seen=now).model_dump()],
+            "wake_positions": [WakePosition(
+                mmsi=str(mmsi), ts=now, lon=body["Longitude"], lat=body["Latitude"],
+                sog_kn=body.get("Sog"), cog_deg=body.get("Cog"),
+                heading_deg=body.get("TrueHeading")).model_dump()],
         }
     if mtype == "ShipStaticData":
         body = ((msg.get("Message") or {}).get("ShipStaticData")) or {}
-        return {"wake_vessels": [{
-            "mmsi": str(mmsi), "name": _name(body.get("Name")),
-            "ship_type": ship_type_label(body.get("Type")),
-            "callsign": _name(body.get("CallSign")),
-            "first_seen": now, "last_seen": now}]}
+        return {"wake_vessels": [WakeVessel(
+            mmsi=str(mmsi), name=body.get("Name"),
+            ship_type=ship_type_label(body.get("Type")),
+            callsign=body.get("CallSign"),
+            first_seen=now, last_seen=now).model_dump()]}
     return {}
 
 
@@ -196,31 +221,38 @@ async def collect(root: Path, api_key: str, preset: str, duration_s: float,
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-aisstream", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    parser.add_argument("--duration", type=float, default=0.0,
-                        help="구독 유지 시간(초). 0 = Ctrl-C까지 (기본)")
-    parser.add_argument("--preset", default=DEFAULT_PRESET,
-                        choices=sorted(PRESETS), help="관심 해역 (기본: kr)")
-    args = parser.parse_args(argv)
+class Preset(str, Enum):
+    kr = "kr"
+    taiwan = "taiwan"
+    sea = "sea"
+
+
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    duration: Annotated[float, typer.Option(
+        help="구독 유지 시간(초). 0 = Ctrl-C까지")] = 0.0,
+    preset: Annotated[Preset, typer.Option(help="관심 해역")] = Preset(DEFAULT_PRESET),
+) -> None:
+    """AISStream 스트림 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     api_key = os.environ.get("DATALAKE_AIS_KEY")
     if not api_key:
         log.error("aisstream 비활성: DATALAKE_AIS_KEY 미설정 (전용 키 필요)")
-        return 2
+        raise typer.Exit(2)
     try:
-        return asyncio.run(collect(
-            Path(args.output) if args.output else DEFAULT_ROOT,
-            api_key, args.preset, args.duration))
+        asyncio.run(collect(output or DEFAULT_ROOT, api_key, preset.value, duration))
     except KeyboardInterrupt:
-        return 0
+        pass
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
-        return 1
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

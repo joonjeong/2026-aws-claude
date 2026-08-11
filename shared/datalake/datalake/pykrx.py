@@ -9,7 +9,6 @@ landing/pykrx/market_quotes_kr + bronze/market_quotes.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import logging
@@ -18,6 +17,9 @@ import tomllib
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Annotated, Optional
+
+import typer
 
 log = logging.getLogger("datalake.pykrx")
 
@@ -123,22 +125,21 @@ async def collect(root: Path, fetcher=None) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-pykrx", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    args = parser.parse_args(argv)
+def cli(output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None) -> None:
+    """KRX 시세 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        return asyncio.run(collect(
-            Path(args.output) if args.output else DEFAULT_ROOT))
-    except KeyboardInterrupt:
-        return 0
+        asyncio.run(collect(output or DEFAULT_ROOT))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
-        return 1
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

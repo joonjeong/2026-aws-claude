@@ -7,7 +7,6 @@ landing/<매체>/news + bronze/news_articles. 정규화는 hub news와 동일 �
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import calendar
 import html
@@ -19,9 +18,11 @@ import time
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated, Optional
 
 import feedparser
 import httpx
+import typer
 
 log = logging.getLogger("datalake.rss")
 
@@ -157,31 +158,32 @@ async def collect(root: Path, feed_ids: list[str] | None = None,
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-rss", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    parser.add_argument("--feeds", default=None,
-                        help="쉼표 구분 매체 id 선택 (기본: 목록 전체)")
-    parser.add_argument("--list", action="store_true", dest="list_feeds",
-                        help="수집 대상 목록 출력 후 종료")
-    args = parser.parse_args(argv)
-    if args.list_feeds:
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    feeds: Annotated[Optional[str], typer.Option(
+        help="쉼표 구분 매체 id 선택 (기본: 목록 전체)")] = None,
+    list_feeds: Annotated[bool, typer.Option(
+        "--list", help="수집 대상 목록 출력 후 종료")] = False,
+) -> None:
+    """RSS 목록 일괄 수집 → landing + bronze."""
+    if list_feeds:
         for fid, feed in load_feeds().items():
             print(f"{fid:12s} {feed['lang']:2s}  {feed['name']}  {feed['rss_url']}")
-        return 0
+        return
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        return asyncio.run(collect(
-            Path(args.output) if args.output else DEFAULT_ROOT,
-            args.feeds.split(",") if args.feeds else None))
-    except KeyboardInterrupt:
-        return 0
+        asyncio.run(collect(output or DEFAULT_ROOT,
+                            feeds.split(",") if feeds else None))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
-        return 1
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

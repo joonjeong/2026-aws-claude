@@ -9,16 +9,18 @@ landing/adsblol/contrail_* + bronze/contrail_aircraft·contrail_positions.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import logging
 import os
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
+from typing import Annotated, Optional
 
 import httpx
+import typer
 
 log = logging.getLogger("datalake.adsblol")
 
@@ -158,24 +160,30 @@ async def collect(root: Path, scope: str,
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-adsblol", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    parser.add_argument("--scope", choices=("global", "regions", "both"),
-                        default="both", help="수집 범위 (기본: both)")
-    args = parser.parse_args(argv)
+class Scope(str, Enum):
+    global_ = "global"
+    regions = "regions"
+    both = "both"
+
+
+def cli(
+    output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None,
+    scope: Annotated[Scope, typer.Option(help="수집 범위")] = Scope.both,
+) -> None:
+    """항공 트래픽 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        return asyncio.run(collect(
-            Path(args.output) if args.output else DEFAULT_ROOT, args.scope))
-    except KeyboardInterrupt:
-        return 0
+        asyncio.run(collect(output or DEFAULT_ROOT, scope.value))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
-        return 1
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

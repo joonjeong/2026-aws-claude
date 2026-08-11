@@ -26,8 +26,9 @@ datalake/
 ```
 
 각 파일은 데이터가 유입되어 가공되는 순서대로 읽힌다:
-**순수 파싱 함수들**(map/filter — 비정상은 None→필터) → **랜딩 함수**(append)
-→ **collect**(IO 오케스트레이션) → **main**(argparse).
+**행 모델**(pydantic — 캐스팅·폴백·센티널을 `Annotated[T, BeforeValidator]`
+필드 선언으로) → **순수 파싱**(map/filter — 비정상은 None→필터) →
+**랜딩**(append) → **collect**(IO) → **cli/main**(typer — 타입 힌트가 곧 옵션).
 
 ```
 uv run datalake-<원천> [--output <root>]

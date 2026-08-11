@@ -85,8 +85,9 @@ AST 파싱해 `hub.*`/`app.*`/`labkit` import를 발견하면 실패한다.
 shared/datalake/datalake/
 ├── usgs_feed.py rss.py youtube.py adsblol.py opensky.py
 │   aisstream.py yfinance.py pykrx.py gdelt.py
-│     ★ 파일 하나 = 원천 하나: 순수 파싱(map/filter) → 랜딩(append) →
-│       collect(IO) → main(argparse). 파일 간 import 없음 —
+│     ★ 파일 하나 = 원천 하나: 행 모델(pydantic 캐스팅·폴백) →
+│       순수 파싱(map/filter) → 랜딩(append) → collect(IO) →
+│       cli(typer). 파일 간 import 없음 —
 │       test_independence.py가 hub/labkit 금지와 내부 상호 import를 검사
 ├── maintenance.py        landing·bronze 전일 gzip + 보존 프루닝
 ├── rss_feeds.toml        RSS 수집 대상 목록 (DATALAKE_RSS_FEEDS로 교체)
@@ -186,6 +187,7 @@ SELECT * FROM read_parquet('data/silver/quake_events/*/*.parquet');
 | v0.7 | market 심볼 목록 파일(market_symbols.toml) + yfinance·pykrx 기본 의존성 승격(extra 폐지) | 사용자 결정: 대상은 목록으로, extra 미설치=코드 2 함정 제거 — 전 상류 실수집 검증 완료 |
 | v0.8 | landing/bronze 분리: 수집 명령이 경량 ETL까지 수행해 bronze(파싱 레코드) 랜딩, silver는 dedup·컬럼화만(구 normalize 분해). 전 명령 `--output` 파라미터 | 사용자 결정: normalize 비대 해소 + 존 의미를 일반적 메달리온과 정합 (landing=원본, bronze=무가공 테이블) |
 | v0.9 | 원천당 자기완결 파일 재작성: core/sources/cli 3분할·model.py·pyarrow 제거, map-filter 펑셔널 파이프라인, silver·bronze 리빌드 CLI 삭제 (silver→gold는 정리된 원천 기반 재설계 예정) | 사용자 결정: 레이어 추상화 대신 파일 하나가 fetch→파싱→랜딩까지 — 내부 상호 import도 테스트로 금지 |
+| v0.10 | CLI를 typer로, 캐스팅·폴백·센티널을 pydantic `Annotated[T, BeforeValidator]` 이디엄으로 — 행 모델이 bronze 스키마 자기문서화 | 사용자 제안: argparse·수동 캐스팅 보일러플레이트 축소 |
 
 ## 10. 검증 상태 (2026-08-11)
 

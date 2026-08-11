@@ -1,12 +1,11 @@
-"""uv run datalake-usgs-feed — USGS 지진 피드 수집 (자기완결). 권장 60s.
+"""USGS 지진 피드 수집 (자기완결). 권장 60s.
 
-파이프라인: fetch → parse(순수 map/filter) → landing/usgs_feed/quake +
-bronze/quake_events. 정규화 의미는 hub quake 모듈과 동일.
+파이프라인: fetch → QuakeEvent 모델 파싱(캐스팅·폴백은 pydantic) →
+landing/usgs_feed/quake + bronze/quake_events. hub quake와 동일 의미.
 """
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import logging
@@ -14,8 +13,11 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Annotated, Optional
 
 import httpx
+import typer
+from pydantic import BaseModel, BeforeValidator
 
 log = logging.getLogger("datalake.usgs_feed")
 
@@ -29,39 +31,45 @@ DEFAULT_ROOT = Path(os.environ.get(
     "DATALAKE_ROOT", str(Path(__file__).resolve().parent.parent / "data")))
 
 
-# ── 순수 파싱 (hub quake normalize와 동일 의미) ──────────────────────
-def _float(value, default: float = 0.0) -> float:
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return default
-    return result if result == result else default  # NaN -> default
+# ── bronze 행 모델 — 캐스팅·폴백은 필드 선언으로 (pydantic 이디엄) ────
+def _or(default):
+    """실패·NaN → 기본값 코어서 (BeforeValidator 팩토리)."""
+    def coerce(v):
+        try:
+            f = float(v)
+            return default if f != f else v  # NaN 방어
+        except (TypeError, ValueError):
+            return default
+    return BeforeValidator(coerce)
 
 
-def _int(value, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+F0 = Annotated[float, _or(0.0)]                # float 폴백 0.0
+I0 = Annotated[int, _or(0)]                    # int 폴백 0
+PlaceStr = Annotated[str, BeforeValidator(lambda v: str(v) if v else "unknown")]
+
+
+class QuakeEvent(BaseModel):
+    id: str
+    mag: F0 = 0.0
+    place: PlaceStr = "unknown"
+    time: I0 = 0
+    lon: F0 = 0.0
+    lat: F0 = 0.0
+    depth_km: F0 = 0.0
 
 
 def to_row(feature) -> dict | None:
-    """GeoJSON feature → quake_events 행. 비정상은 None (filter로 제거)."""
+    """GeoJSON feature → 행. 비정상은 None (filter로 제거)."""
     try:
         if not feature.get("id"):
             return None
         props = feature.get("properties") or {}
         coords = list(((feature.get("geometry") or {}).get("coordinates") or [])) + [0, 0, 0]
-        place = props.get("place")
-        return {
-            "id": str(feature["id"]),
-            "mag": _float(props.get("mag")),
-            "place": str(place) if place else "unknown",
-            "time": _int(props.get("time")),
-            "lon": _float(coords[0]),
-            "lat": _float(coords[1]),
-            "depth_km": _float(coords[2]),
-        }
+        return QuakeEvent(
+            id=feature["id"], mag=props.get("mag"), place=props.get("place"),
+            time=props.get("time"), lon=coords[0], lat=coords[1],
+            depth_km=coords[2],
+        ).model_dump()
     except Exception:  # 깨진 feature 격리
         log.warning("skipping malformed feature", exc_info=True)
         return None
@@ -71,7 +79,7 @@ def parse(payload: dict) -> list[dict]:
     return [row for row in map(to_row, payload.get("features") or []) if row]
 
 
-# ── 랜딩 (파일 append — 자기완결 헬퍼) ──────────────────────────────
+# ── 랜딩 (자기완결 헬퍼) ────────────────────────────────────────────
 def _jsonl(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, default=str)
 
@@ -91,7 +99,6 @@ def _part(root: Path, zone: str, *dirs: str, ts: float) -> Path:
 
 def land(root: Path, ts: float, payload: dict, meta: dict,
          rows: list[dict]) -> int:
-    """landing 봉투 1줄 + bronze 행 N줄 append. 적재 행 수 반환."""
     envelope = {
         "fetched_at": datetime.fromtimestamp(ts, tz=timezone.utc)
         .strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -111,29 +118,28 @@ async def collect(root: Path,
         resp = await client.get(FEED_URL)
         resp.raise_for_status()
         payload = resp.json()
-    ts = time.time()
     meta = {"url": FEED_URL, "status": resp.status_code,
             "elapsed_ms": int((time.monotonic() - started) * 1000)}
-    n = land(root, ts, payload, meta, parse(payload))
+    n = land(root, time.time(), payload, meta, parse(payload))
     log.info("[%s] 봉투 1개 · bronze %d행 → %s", SOURCE, n, root)
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="datalake-usgs-feed", description=__doc__)
-    parser.add_argument("--output", default=None, metavar="ROOT",
-                        help="레이크 루트 (기본: env DATALAKE_ROOT)")
-    args = parser.parse_args(argv)
+def cli(output: Annotated[Optional[Path], typer.Option(
+        help="레이크 루트 (기본: env DATALAKE_ROOT)")] = None) -> None:
+    """USGS 지진 피드 1회 수집 → landing + bronze."""
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     try:
-        return asyncio.run(collect(Path(args.output) if args.output else DEFAULT_ROOT))
-    except KeyboardInterrupt:
-        return 0
+        asyncio.run(collect(output or DEFAULT_ROOT))
     except Exception as exc:
         log.error("실패: %s: %s", type(exc).__name__, exc)
-        return 1
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    typer.run(cli)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
