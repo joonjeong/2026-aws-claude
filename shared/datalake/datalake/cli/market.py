@@ -20,7 +20,7 @@ async def _run(args) -> int:
         logging.basicConfig(level=logging.INFO)
         log.error("market 비활성: uv sync --extra market 필요")
         return _common.EXIT_DISABLED
-    sinks = _common.build_sinks(args.sqlite)
+    sinks = _common.build_sinks()
     try:
         kinds = args.kinds.split(",") if args.kinds else None
         records = await client.fetch(kinds)

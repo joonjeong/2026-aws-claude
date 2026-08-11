@@ -19,7 +19,7 @@ async def _run(args) -> int:
         logging.basicConfig(level=logging.INFO)
         log.error("trend 비활성: YT_API_KEY 미설정")
         return _common.EXIT_DISABLED
-    sinks = _common.build_sinks(args.sqlite)
+    sinks = _common.build_sinks()
     try:
         records = await client.fetch()
         _common.report("trend", _common.emit(sinks, records))

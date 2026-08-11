@@ -19,12 +19,7 @@ EXIT_DISABLED = 2  # 키·엑스트라 부재 — 오케스트레이터가 구�
 
 
 def base_parser(prog: str, description: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog=prog, description=description)
-    parser.add_argument(
-        "--sqlite", action="store_true",
-        help="SQLite 파생 존에도 적재 (env DATALAKE_SQLITE=1과 동일)",
-    )
-    return parser
+    return argparse.ArgumentParser(prog=prog, description=description)
 
 
 def setup_logging() -> None:
@@ -49,13 +44,9 @@ def run_async(coro: Awaitable[int]) -> int:
         return EXIT_ERROR
 
 
-def build_sinks(force_sqlite: bool = False) -> list:
-    sinks: list = [FileSink(config.ROOT)]
-    if force_sqlite or config.SQLITE_ENABLED:
-        from ..core.sqlite_sink import SqliteSink
-
-        sinks.append(SqliteSink(config.DB_PATH))
-    return sinks
+def build_sinks() -> list:
+    # 수집은 raw 존에만 쓴다 — 정규화는 datalake-normalize가 배치로 물질화
+    return [FileSink(config.ROOT)]
 
 
 def emit(sinks: Sequence, records: Sequence[Record]) -> int:

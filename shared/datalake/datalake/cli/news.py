@@ -8,7 +8,7 @@ from . import _common
 
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks(args.sqlite)
+    sinks = _common.build_sinks()
     try:
         feed_ids = args.feeds.split(",") if args.feeds else None
         records = await news.build().fetch(feed_ids)

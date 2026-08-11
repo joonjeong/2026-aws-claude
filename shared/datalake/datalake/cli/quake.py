@@ -8,7 +8,7 @@ from . import _common
 
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks(args.sqlite)
+    sinks = _common.build_sinks()
     try:
         records = await quake.build().fetch()
         _common.report("quake", _common.emit(sinks, records))

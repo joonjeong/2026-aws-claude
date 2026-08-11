@@ -15,7 +15,7 @@ STATE_PATH = config.ROOT / "state" / "flashpoint_last_url"
 
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks(args.sqlite)
+    sinks = _common.build_sinks()
     try:
         client = flashpoint.build(state_path=STATE_PATH)
         records = await client.fetch(force=args.force)

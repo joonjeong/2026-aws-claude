@@ -68,14 +68,15 @@ shared/datalake/
 │   │   ├── env.py            # env_str/int/float (자체 구현)
 │   │   ├── stream.py         # StreamCollector — 백오프 재접속, connect 주입
 │   │   ├── sinks.py          # FileSink(기본)
-│   │   ├── sqlite_sink.py    # LakeDb + SqliteSink + rebuild (자체 sqlite3 래퍼)
+│   │   ├── transform.py      # Record → 정규화 테이블 행 (model.py 스펙과 짝)
+│   │   ├── parquet.py        # raw 순회 + Parquet 파티션 물질화(materialize)
 │   │   └── maintenance.py    # gzip 로테이션·보존 프루닝 (one-shot 함수)
 │   ├── sources/              # ★ 순수 코어 클라이언트 (모듈당 1파일)
 │   │   ├── quake.py news.py trend.py contrail.py wake.py market.py flashpoint.py
 │   ├── cli/                  # ★ 소스별 one-shot CLI (클라이언트 래핑)
 │   │   ├── _common.py        #   싱크 조립·배출 격리·run_async(종료 코드)
-│   │   ├── quake.py … flashpoint.py, rebuild.py, maintenance.py
-│   └── schema.py             # SQLite 옵션용 DDL (hub 정규화 테이블과 동형)
+│   │   ├── quake.py … flashpoint.py, normalize.py, maintenance.py
+│   └── model.py              # ★ 정규화 존 데이터 모델 단일 진실 (pyarrow 스키마)
 └── tests/
 ```
 
@@ -121,15 +122,20 @@ Hive 스타일 파티션 + JSONL — 나중에 DuckDB/Athena/pandas로 바로 �
   `DATALAKE_COMPRESS=1`(기본 켜짐)이면 전일 파티션을 gzip 압축(약 1/10).
   `DATALAKE_RAW_RETENTION_DAYS`(기본 0=무제한)로 프루닝 옵션.
 
-### 5.2 SQLite 옵션 (`DATALAKE_SQLITE=1`)
+### 5.2 Parquet 정규화 존 (v0.3 — SQLite 대체, 사용자 결정 2026-08-11)
 
-- 자체 파일 `<DATALAKE_ROOT>/datalake.db`, labkit `Archive` 클래스 재사용
-  (WAL·스키마 레지스트리·프루닝 검증 로직 그대로).
-- 테이블은 hub 정규화 스키마와 **동형**(quake_events, news_articles,
-  trend_videos/stats, contrail/wake dim+fact, market은 snapshots JSON):
-  이미 검증된 스키마라 학습 비용 0, hub DB와 조인·비교도 쉬움.
-- raw 존이 진실의 원천(source of truth), SQLite는 조회 편의용 파생 존.
-  유실 시 raw에서 재구축 가능해야 함 → INSERT는 전부 멱등(OR IGNORE/UPSERT).
+- v0.1~0.2의 SQLite 파생 존은 제거. **DB 없음 — 파일이 인터페이스**:
+  `datalake-normalize`가 raw를 읽어
+  `<ROOT>/normalized/<table>/dt=YYYY-MM-DD/part-000.parquet`로 물질화.
+- **데이터 모델의 단일 진실은 `datalake/model.py`** — 테이블 10개의
+  pyarrow 스키마·자연키·병합 규칙. Parquet에 스키마가 내장되므로 소비자는
+  DDL 없이 타입을 안다. 테이블은 hub 정규화 스키마와 동형이되 market만
+  JSON snapshots 대신 `market_quotes`로 평탄화(kind: index/indicator/quote_us/quote_kr).
+- 파티션 의미: 그 날짜(UTC)에 관측된 행. 파티션 내 dedup은 키 기준
+  (dim류는 non-null 병합 + first/last_seen min/max — hub 업서트 동형),
+  파티션 간 전역 dedup은 소비 측 몫. 파티션 통째 재작성 = 멱등.
+- 소비: DuckDB·pandas 직독, Postgres는 `pg_duckdb`/`parquet_s3_fdw` 외부
+  테이블(권장) 또는 정기 COPY 로딩. 순정 `file_fdw`는 CSV 전용이라 부적합.
 
 ## 6. 권장 스케줄 (hub와 동일 — 오케스트레이터 설정용 문서)
 
@@ -145,6 +151,7 @@ Hive 스타일 파티션 + JSONL — 나중에 DuckDB/Athena/pandas로 바로 �
 | `datalake-contrail --scope global` | 600s |
 | `datalake-wake --duration N` | 상시 또는 겹치지 않는 구간 반복 (`DATALAKE_FLUSH_S=10`) |
 | `datalake-flashpoint` | 900s — 파일 중복은 상태 파일로 스킵, GDELT 게시 지연 404는 코드 1로 재시도 위임 |
+| `datalake-normalize` | 시간당 1회 (당일 파티션 재작성) + 자정 후 전일 확정 1회 |
 | `datalake-maintenance` | 일 1회 |
 
 ## 7. 리스크 / 확인 항목

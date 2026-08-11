@@ -120,16 +120,14 @@ async def test_fetch_zip_too_large():
         await client.fetch()
 
 
-def test_sqlite_sink_flashpoint(tmp_path):
+def test_transform_applies_root_filter():
     from datalake.core.source import Record
-    from datalake.core.sqlite_sink import SqliteSink
+    from datalake.core.transform import rows_for
 
     rec = Record(source="flashpoint", kind="export",
                  payload=_row() + "\n" + _row(event_id="1002", root="01"),
-                 meta={}, fetched_at=1786516200.0)
-    sink = SqliteSink(tmp_path / "lake.db")
-    sink.write([rec])
-    sink.write([rec])  # 멱등
-    rows = sink.db.query(
-        "SELECT event_id, root, country FROM flashpoint_events")
-    assert rows == [(1001, "19", "IR")]  # 루트 필터 밖(01)은 제외 (hub 동형)
+                 meta={}, fetched_at=1786429800.0)
+    tables = rows_for(rec)
+    events = tables["flashpoint_events"]
+    assert [e["event_id"] for e in events] == [1001]  # 루트 필터 밖(01) 제외 (hub 동형)
+    assert events[0]["country"] == "IR"

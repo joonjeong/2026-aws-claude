@@ -12,7 +12,7 @@ from . import _common
 
 
 async def _run(args) -> int:
-    sinks = _common.build_sinks(args.sqlite)
+    sinks = _common.build_sinks()
     client = contrail.build()
     try:
         records = []
