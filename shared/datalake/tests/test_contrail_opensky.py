@@ -80,6 +80,9 @@ async def test_opensky_fetch_auth_and_kind(tmp_path, monkeypatch):
     fresh = contrail.OpenSkyProvider(state_path=state)
     assert fresh._read_cached_token() == "TOK"
 
+    # 자격증명 파일은 소유자 전용 (0600) — 타 사용자 읽기 차단
+    assert (state.stat().st_mode & 0o777) == 0o600
+
 
 async def test_opensky_anonymous_fallback(monkeypatch):
     monkeypatch.delenv("DATALAKE_OPENSKY_CLIENT_ID", raising=False)

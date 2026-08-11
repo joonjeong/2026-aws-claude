@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -197,15 +198,17 @@ class OpenSkyProvider:
         if self._state_path is None:
             return
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
-        self._state_path.write_text(
-            json.dumps({"access_token": token,
-                        "expires_at": time.time() + expires_in}),
-            encoding="utf-8",
-        )
+        payload = json.dumps({"access_token": token,
+                              "expires_at": time.time() + expires_in})
+        # 자격증명 파일은 0600 강제 — umask 기본값(644)의 타 사용자 읽기 차단
+        fd = os.open(self._state_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                     0o600)
+        try:
+            os.write(fd, payload.encode("utf-8"))
+        finally:
+            os.close(fd)
 
     async def _get_token(self, client: httpx.AsyncClient) -> str | None:
-        import os
-
         client_id = os.environ.get(OPENSKY_CLIENT_ID_ENV)
         client_secret = os.environ.get(OPENSKY_CLIENT_SECRET_ENV)
         if not client_id or not client_secret:
