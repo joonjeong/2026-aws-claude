@@ -55,7 +55,12 @@ export default function ContrailApp() {
     try { setWorld(await (await fetch(`${API}/global`)).json()); } catch { /* retry next tick */ }
   }, []);
   const loadRegion = useCallback(async () => {
-    try { setRegion(await (await fetch(`${API}/region`)).json()); } catch { /* retry next tick */ }
+    try {
+      const r = (await (await fetch(`${API}/region`)).json()) as RegionResponse;
+      setRegion(r);
+      const preset = r.preset;
+      if (preset) setView((v) => (v === "world" ? v : preset));
+    } catch { /* retry next tick */ }
   }, []);
 
   useEffect(() => {

@@ -103,6 +103,7 @@ async def history(id: str, hours: float = Query(24, gt=0, le=168)):
 
 @router.post("/brief")
 async def brief():
+    store.trails.prune()
     vessels = store.trails.entities()
     stats = _stats(vessels)
     notable = sorted(vessels, key=lambda v: v.get("sog_kn") or 0, reverse=True)[:10]

@@ -38,10 +38,18 @@ def _on_global(flights: list[dict]) -> None:
     store.set_global(flights)
 
 
+def _in_bbox(lat: float, lon: float, bbox: tuple) -> bool:
+    lat_min, lon_min, lat_max, lon_max = bbox
+    return lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
+
+
 def _on_region(flights: list[dict]) -> None:
+    bbox = store.preset()["bbox"]
     dims: list[tuple] = []
     facts: list[tuple] = []
     for f in flights:
+        if not _in_bbox(f["lat"], f["lon"], bbox):
+            continue  # 프리셋 전환 경합: 이전 bbox로 요청된 응답이 리셋 이후 도착
         added = store.trails.ingest(f)
         if added:
             dims.append((

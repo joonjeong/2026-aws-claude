@@ -17,6 +17,8 @@ from .store import store
 
 router = APIRouter()
 
+_kick_task: asyncio.Task | None = None
+
 
 def health() -> dict:
     failing = (global_collector.consecutive_failures
@@ -99,7 +101,8 @@ async def set_preset(body: PresetBody):
         store.active_preset = body.id
         store.reset()
         # 다음 정규 주기를 기다리지 않고 새 bbox로 즉시 1회 수집
-        asyncio.create_task(region_collector.run_once())
+        global _kick_task
+        _kick_task = asyncio.create_task(region_collector.run_once())
     return {"presets": config.PRESETS, "active": store.active_preset}
 
 
@@ -116,6 +119,7 @@ async def history(id: str, hours: float = Query(24, gt=0, le=168)):
 
 @router.post("/brief")
 async def brief():
+    store.trails.prune()
     region_flights = store.trails.entities()
     notable = sorted(
         region_flights, key=lambda f: f.get("velocity_ms") or 0, reverse=True

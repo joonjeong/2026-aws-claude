@@ -72,12 +72,19 @@ def normalize_static(msg: dict) -> tuple[str, dict] | None:
     }
 
 
+def _in_bbox(lat: float, lon: float, bbox: tuple) -> bool:
+    lat_min, lon_min, lat_max, lon_max = bbox
+    return lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
+
+
 def handle_message(msg: dict) -> None:
     mtype = msg.get("MessageType")
     if mtype == "PositionReport":
         point = normalize_position(msg, time.time())
         if point is None:
             return
+        if not _in_bbox(point["lat"], point["lon"], store.preset()["bbox"]):
+            return  # 구독 전환 경합: 새 bbox 적용 전 대기 중이던 메시지
         added = store.trails.ingest(point)
         if added:  # dim·fact 기록은 trail 수용분만 — 메시지 폭주가 DB에 닿지 않게
             archive_insert(schema.UPSERT_VESSEL, [(
