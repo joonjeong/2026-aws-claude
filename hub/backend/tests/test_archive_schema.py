@@ -1,6 +1,8 @@
 """Archive 정규화 확장: 모듈 정의 테이블 등록·기록·조회·프루닝."""
 import time
 
+import pytest
+
 from labkit import Archive
 
 DDL = """
@@ -57,3 +59,9 @@ def test_prune_table_by_retention(tmp_path):
     assert a.prune_table("t_positions", "ts", 7) == 1
     assert a.prune_table("t_positions", "ts", 0) == 0        # disabled
     assert a.prune_table("unregistered", "ts", 7) == 0       # 미등록 테이블 거부
+
+
+def test_prune_table_rejects_bad_column_identifier(tmp_path):
+    a = make(tmp_path)
+    with pytest.raises(ValueError):
+        a.prune_table("t_positions", "ts; DROP TABLE t_vessels", 7)

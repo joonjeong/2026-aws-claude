@@ -13,6 +13,7 @@ Two tables by data shape:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -38,6 +39,9 @@ CREATE INDEX IF NOT EXISTS idx_snapshots ON snapshots (module, kind, ts);
 
 def _dump(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class Archive:
@@ -124,6 +128,8 @@ class Archive:
         via table/column names)."""
         if days <= 0 or table not in self._tables:
             return 0
+        if not _IDENT_RE.fullmatch(ts_col):
+            raise ValueError(f"invalid column name: {ts_col!r}")
         cur = self._conn.execute(
             f"DELETE FROM {table} WHERE {ts_col} < ?",  # noqa: S608 — allowlisted
             (time.time() - days * 86_400,),
