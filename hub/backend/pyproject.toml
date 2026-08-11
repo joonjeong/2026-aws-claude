@@ -20,3 +20,9 @@ package = false
 
 [tool.uv.sources]
 labkit = { path = "../../shared", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
