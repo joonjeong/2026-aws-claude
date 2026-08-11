@@ -39,8 +39,9 @@ uv run datalake-<원천> [--output <root>]
 
 - **공급자 정보 이중 기록**: `source=` Hive 파티션(물리 분리·경로 프루닝·
   공급자 단위 재처리) + 행 안의 `source` 컬럼(파일 밖에서도 자기서술).
-  같은 테이블을 공급하는 원천들의 필드는 **합집합** — contrail은
-  `origin_country`(opensky)·`type`/`reg`(adsblol)를 모두 갖고 없는 쪽은 null.
+- **값 없는 키는 생략**: 공급자 고유 필드(contrail의 origin_country는
+  opensky만, type/reg는 adsblol만)는 있는 행에만 존재 — null 패딩 없음.
+  스키마 합집합은 소비 측(DuckDB `union_by_name` 등)이 자동 수행.
 
 - **봉투 의미론**: `source`=원천(usgs_feed, bbc, adsblol …),
   `kind`=데이터셋(quake, news, contrail_region_kr …). 한 원천이 여러

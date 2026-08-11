@@ -145,6 +145,11 @@ def _jsonl(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, default=str)
 
 
+def _row(d: dict) -> str:
+    """bronze 행 직렬화 — 값 없는(None) 키는 생략 (스키마는 소비 측 union)."""
+    return _jsonl({k: v for k, v in d.items() if v is not None})
+
+
 def _append(path: Path, lines: list[str]) -> None:
     if not lines:
         return
@@ -171,9 +176,9 @@ def land(root: Path, kind: str, ts: float, payload: dict, meta: dict,
     flights = parse(payload, now=ts)
     # 모든 bronze 행에 source(공급자) 컬럼 — 같은 테이블에 섞여도 출처 구분
     _append(_part(root, "bronze", "contrail_aircraft", f"source={SOURCE}", ts=ts),
-            [_jsonl({"source": SOURCE, **to_aircraft_row(f)}) for f in flights])
+            [_row({"source": SOURCE, **to_aircraft_row(f)}) for f in flights])
     _append(_part(root, "bronze", "contrail_positions", f"source={SOURCE}", ts=ts),
-            [_jsonl({"source": SOURCE, **to_position_row(f)}) for f in flights])
+            [_row({"source": SOURCE, **to_position_row(f)}) for f in flights])
     return len(flights)
 
 

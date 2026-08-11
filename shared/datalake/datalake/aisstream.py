@@ -103,11 +103,11 @@ def to_vessel_and_position(msg: dict, now: float) -> dict[str, list[dict]]:
         return {
             "wake_vessels": [WakeVessel(
                 mmsi=str(mmsi), name=meta.get("ShipName"),
-                first_seen=now, last_seen=now).model_dump()],
+                first_seen=now, last_seen=now).model_dump(exclude_none=True)],
             "wake_positions": [WakePosition(
                 mmsi=str(mmsi), ts=now, lon=body["Longitude"], lat=body["Latitude"],
                 sog_kn=body.get("Sog"), cog_deg=body.get("Cog"),
-                heading_deg=body.get("TrueHeading")).model_dump()],
+                heading_deg=body.get("TrueHeading")).model_dump(exclude_none=True)],
         }
     if mtype == "ShipStaticData":
         body = ((msg.get("Message") or {}).get("ShipStaticData")) or {}
@@ -115,7 +115,7 @@ def to_vessel_and_position(msg: dict, now: float) -> dict[str, list[dict]]:
             mmsi=str(mmsi), name=body.get("Name"),
             ship_type=ship_type_label(body.get("Type")),
             callsign=body.get("CallSign"),
-            first_seen=now, last_seen=now).model_dump()]}
+            first_seen=now, last_seen=now).model_dump(exclude_none=True)]}
     return {}
 
 

@@ -27,10 +27,11 @@ def test_position_sentinels_and_static():
     tables = aisstream.to_vessel_and_position(
         _pos_msg(sog=102.3, cog=360.0, heading=511), now=1000.0)
     (pos,) = tables["wake_positions"]
-    assert pos["sog_kn"] is None and pos["cog_deg"] is None
-    assert pos["heading_deg"] is None and pos["mmsi"] == "440123456"
+    # 센티널(값 없음)은 키 자체를 생략
+    assert "sog_kn" not in pos and "cog_deg" not in pos
+    assert "heading_deg" not in pos and pos["mmsi"] == "440123456"
     (vessel,) = tables["wake_vessels"]
-    assert vessel["name"] == "HANARA"
+    assert vessel["name"] == "HANARA" and "ship_type" not in vessel
 
     static = aisstream.to_vessel_and_position({
         "MessageType": "ShipStaticData", "MetaData": {"MMSI": 440000001},
@@ -39,6 +40,7 @@ def test_position_sentinels_and_static():
     (v,) = static["wake_vessels"]
     assert v == {"mmsi": "440000001", "name": "EVER X", "ship_type": "화물",
                  "callsign": "AB1", "first_seen": 1000.0, "last_seen": 1000.0}
+    # (static은 전 필드 값이 있어 생략 없음)
 
     assert aisstream.to_vessel_and_position({"MetaData": {}}, now=0) == {}
 

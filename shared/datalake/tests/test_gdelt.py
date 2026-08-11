@@ -67,7 +67,7 @@ def test_parse_filters_and_defends():
 
 def test_parse_blocks_bad_url_scheme():
     (e,) = gdelt.parse(_row(**{"60": "javascript:alert(1)"}))
-    assert e["source_url"] is None
+    assert "source_url" not in e  # 차단된 값은 키 생략
 
 
 async def test_collect_dedups_across_runs_and_lands(tmp_path):

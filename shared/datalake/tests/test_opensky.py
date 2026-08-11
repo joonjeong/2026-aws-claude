@@ -58,7 +58,7 @@ async def test_collect_auth_token_cache_and_zones(tmp_path, monkeypatch):
     rows = [json.loads(x) for x in aircraft.read_text().splitlines()]
     assert all(r["origin_country"] == "South Korea" for r in rows)
     assert all(r["source"] == "opensky" for r in rows)  # 공급자 구분
-    assert all("type" in r and r["type"] is None for r in rows)  # 합집합 — null
+    assert all("type" not in r and "reg" not in r for r in rows)  # 값 없는 키 생략
 
 
 async def test_collect_anonymous_fallback(tmp_path, monkeypatch):

@@ -55,8 +55,7 @@ async def test_collect_zones(tmp_path, monkeypatch):
     (row, *_rest) = [json.loads(x) for x in aircraft.read_text().splitlines()]
     assert row["icao24"] == "a" and "first_seen" in row
     assert row["source"] == "adsblol"          # 공급자 구분 컬럼
-    assert "type" in row and "reg" in row      # adsblol 고유 필드 (합집합)
-    assert "origin_country" in row             # opensky 고유 필드 — null로 존재
+    assert "origin_country" not in row         # 값 없는 키는 생략 (readsb엔 없음)
     (positions,) = list(tmp_path.glob("bronze/contrail_positions/source=*/dt=*/part-*.jsonl"))
     assert all(json.loads(x)["source"] == "adsblol"
                for x in positions.read_text().splitlines())

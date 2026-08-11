@@ -131,7 +131,7 @@ def to_event(line: str) -> dict | None:
             articles=c[_ARTICLES], tone=c[_TONE], actor1=c[_ACTOR1],
             actor2=c[_ACTOR2], lat=c[_LAT], lon=c[_LON],
             country=c[_COUNTRY], source_url=c[_URL],
-        ).model_dump()
+        ).model_dump(exclude_none=True)
     except Exception:  # 행 단위 격리 (event_id 비정상 포함)
         return None
 

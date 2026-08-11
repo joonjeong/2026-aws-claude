@@ -32,8 +32,9 @@ def test_yfinance_flatten():
                                 "price": 100000.0, "change": -5.0,
                                 "change_pct": -0.01, "volume": 123}]}
     rows = yfinance.flatten("market_overview", overview, ts=1000.0)
-    assert {(r["kind"], r["symbol"], r["market"]) for r in rows} \
+    assert {(r["kind"], r["symbol"], r.get("market")) for r in rows} \
         == {("index", "^KS11", "KR"), ("indicator", "BTC-USD", None)}
+    assert all("market" not in r for r in rows if r["kind"] == "indicator")  # 키 생략
 
     us = yfinance.flatten("market_quotes_us", [{"symbol": "AAPL"}], ts=1000.0)
     assert us[0]["kind"] == "quote_us" and us[0]["market"] == "US"
