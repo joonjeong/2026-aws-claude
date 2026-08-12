@@ -1,0 +1,86 @@
+# RSS 수집 대상 목록 — datalake-rss 명령이 이 파일을 읽는다.
+# 매체 추가/제거 = 여기에 항목 추가/삭제 (코드 변경 불요).
+# env DATALAKE_RSS_FEEDS=<path> 로 다른 목록 파일 지정 가능.
+#
+# 각 항목: name(표시명), lang, rss_url (필수) / user_agent (선택 — UA 차단 매체용)
+# 출처: hub news/config.py SOURCES 값 복사 (2026-08-11 기준 15개, KBS는 유효 RSS 없음)
+
+[feeds.bbc]
+name = "BBC World"
+lang = "en"
+rss_url = "http://feeds.bbci.co.uk/news/world/rss.xml"
+
+[feeds.guardian]
+name = "The Guardian World"
+lang = "en"
+rss_url = "https://www.theguardian.com/world/rss"
+
+[feeds.nhk]
+name = "NHK 국제"
+lang = "ja"
+rss_url = "https://news.web.nhk/n-data/conf/na/rss/cat6.xml"
+
+[feeds.yna]
+name = "연합뉴스 국제"
+lang = "ko"
+rss_url = "https://www.yna.co.kr/rss/international.xml"
+
+[feeds.aljazeera]
+name = "Al Jazeera"
+lang = "en"
+rss_url = "https://www.aljazeera.com/xml/rss/all.xml"
+
+[feeds.hani]
+name = "한겨레"
+lang = "ko"
+rss_url = "https://www.hani.co.kr/rss/"
+
+[feeds.khan]
+name = "경향신문"
+lang = "ko"
+rss_url = "https://www.khan.co.kr/rss/rssdata/total_news.xml"
+
+[feeds.chosun]
+name = "조선일보"
+lang = "ko"
+rss_url = "https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml"
+
+[feeds.sbs]
+name = "SBS 뉴스(정치)"
+lang = "ko"
+rss_url = "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01"
+
+# mk는 2026-08-11 22:59 기준 모든 UA(브라우저·NewsroomLens·DataLake)에 403 —
+# UA가 아닌 상류 측 차단(IP/봇 정책)으로 판단. 매체 격리로 나머지는 무영향이며
+# 스케줄 재실행이 곧 재시도. 지속되면 다른 매경 피드 URL 재확인 필요.
+[feeds.mk]
+name = "매일경제"
+lang = "ko"
+rss_url = "https://www.mk.co.kr/rss/40300001/"
+
+[feeds.hankyung]
+name = "한국경제"
+lang = "ko"
+rss_url = "https://www.hankyung.com/feed/economy"
+
+[feeds.npr]
+name = "NPR"
+lang = "en"
+rss_url = "https://feeds.npr.org/1001/rss.xml"
+
+[feeds.nyt]
+name = "NYT"
+lang = "en"
+rss_url = "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"
+
+[feeds.fox]
+name = "Fox News"
+lang = "en"
+rss_url = "https://feeds.foxnews.com/foxnews/latest"
+
+# WaPo는 비브라우저 UA를 403으로 차단 — 피드 리더 관행대로 브라우저 UA
+[feeds.wapo]
+name = "Washington Post"
+lang = "en"
+rss_url = "https://feeds.washingtonpost.com/rss/world"
+user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36"
